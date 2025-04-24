@@ -82,7 +82,8 @@ module EnumNamesEnv : sig
     -> LabelName.t list
     -> t * EnumTypeName.t * EnumName.t list
   (** Generate unique names for the enum type and enum values based on the
-      local protocol and the labels of the first interactions in the choice *)
+      local protocol and the labels of the first interactions in the choice
+  *)
 end
 
 (** Environment to generate the channel struct for a role in a protocol. The
@@ -220,7 +221,8 @@ module ProtocolSetupGen : sig
   (** Generate the assignments for all of the channels needed in a protocol
       and create all the channel and invitation structs for each role with
       them. Return the names of the variables which contain the channel and
-      invitation structs for each role as well as the setup implementation. *)
+      invitation structs for each role as well as the setup implementation.
+  *)
 end
 
 (** Environment used to generate the callbacks interface for a role. It keeps

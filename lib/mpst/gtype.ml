@@ -300,8 +300,8 @@ let of_protocol (global_protocol : Syntax.global_protocol) =
                 (module TypeVariableName)
                 (List.map ~f:snd conts) )
       | Do (protocol, roles, _) ->
-          (* This case is only reachable with NestedProtocols pragma turned on
-           * *)
+          (* This case is only reachable with NestedProtocols pragma turned
+             on *)
           assert (Pragma.nested_protocol_enabled ()) ;
           let fst_role = List.hd_exn roles in
           let cont, free_names =

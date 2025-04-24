@@ -15,7 +15,8 @@ module type UntaggedName = sig
   (** Change the identifier, without changing the location *)
 
   val update : t -> f:(string -> string) -> t
-  (** Update the identifier with function [~f], without changing the location *)
+  (** Update the identifier with function [~f], without changing the location
+  *)
 
   val user : t -> string
   (** Prints the identifier in a user-friendly format, i.e. without the

@@ -142,37 +142,18 @@ let init_conv_env =
  *   g
  *)
 
-(* (** Construct the epsilon closure for a given NDA *)
- * let epsilon_closure g =
- *   let rec compute_closure visited state =
- *     let edges = G.succ_e g state in
- *     List.fold edges ~init:visited ~f:(fun visited -> function
- *       | _, Epsilon, dst when not (Set.mem visited dst) ->
- *           let visited = Set.add visited dst in
- *           compute_closure visited dst
- *       | _ -> visited)
- *   in
- *   G.fold_vertex
- *     (fun v closures ->
- *       Map.add_exn closures ~key:v
- *         ~data:(compute_closure (Set.singleton (module Int) v) v))
- *     g
- *     (Map.empty (module Int))
- *
+(* (** Construct the epsilon closure for a given NDA *) * let epsilon_closure
+   g = * let rec compute_closure visited state = * let edges = G.succ_e g
+   state in * List.fold edges ~init:visited ~f:(fun visited -> function * |
+   _, Epsilon, dst when not (Set.mem visited dst) -> * let visited = Set.add
+   visited dst in * compute_closure visited dst * | _ -> visited) * in *
+   G.fold_vertex * (fun v closures -> * Map.add_exn closures ~key:v *
+   ~data:(compute_closure (Set.singleton (module Int) v) v)) * g * (Map.empty
+   (module Int)) *
 
- * module IntSet = struct
- *   module M = struct
- *     type t = Set.M(Int).t
- *
- *     let compare = Set.compare_direct
- *
- *     let sexp_of_t = Set.sexp_of_m__t (module Int)
- *   end
- *
- *   include M
- *   include Comparator.Make (M)
- * end
- *)
+   * module IntSet = struct * module M = struct * type t = Set.M(Int).t * *
+   let compare = Set.compare_direct * * let sexp_of_t = Set.sexp_of_m__t
+   (module Int) * end * * include M * include Comparator.Make (M) * end *)
 
 (* let powerset_construction (start, old_g) =
  *   let epsilons = epsilon_closure old_g in

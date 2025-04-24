@@ -7,7 +7,8 @@ open Names
 type 'a cont_list = (LabelName.t * PayloadTypeName.t list * 'a) list
 
 (** Global Types with basic features, in a form that is similar to those seen
-    in standard literature. (No choice constructor, all choices are directed) *)
+    in standard literature. (No choice constructor, all choices are directed)
+*)
 type global =
   | BranchG of
       { g_br_from: RoleName.t

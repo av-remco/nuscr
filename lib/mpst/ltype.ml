@@ -318,8 +318,8 @@ let rec merge projected_role lty1 lty2 =
         | `Init, (vars, (RecvL (m, r, _) as lty)) :: rest ->
             try_merge
               (`Recv
-                (Set.singleton (module LabelName) m.label, r, [(vars, lty)])
-                )
+                 (Set.singleton (module LabelName) m.label, r, [(vars, lty)])
+              )
               rest
         | `End, [] -> EndL
         | `End, (_, EndL) :: rest -> try_merge `End rest
@@ -482,8 +482,8 @@ let rec project' env (projected_role : RoleName.t) =
   | MessageG (m, send_r, recv_r, g_type) -> (
       let next env = project' env projected_role g_type in
       match projected_role with
-      (* When projected role is involved in an interaction, reset unguarded_tv
-       * *)
+      (* When projected role is involved in an interaction, reset
+         unguarded_tv *)
       | _ when RoleName.equal projected_role send_r ->
           SendL
             ( m

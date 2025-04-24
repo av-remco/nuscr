@@ -61,7 +61,8 @@ type nested_global_info =
 type nested_t = nested_global_info Map.M(ProtocolName).t
 
 val show_nested_t : nested_t -> string
-(** Provides a textual representation of a global type with nested protocols *)
+(** Provides a textual representation of a global type with nested protocols
+*)
 
 val call_label :
   RoleName.t -> ProtocolName.t -> RoleName.t list -> LabelName.t

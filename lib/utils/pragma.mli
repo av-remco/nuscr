@@ -1,5 +1,6 @@
 (** This module contains variables configuarations, to be set by pragmas or
-    command line arguments, not to be changed for the duration of the program *)
+    command line arguments, not to be changed for the duration of the program
+*)
 
 type t =
   | NestedProtocols
@@ -17,7 +18,8 @@ val pragma_of_string : string -> t
 type pragmas = (t * string option) list [@@deriving show]
 
 val solver_show_queries : unit -> bool
-(** Whether to display queries to SMT solvers (with RefinementTypes pragma) *)
+(** Whether to display queries to SMT solvers (with RefinementTypes pragma)
+*)
 
 val set_solver_show_queries : bool -> unit
 (** Set solver_show_queries *)
@@ -41,7 +43,8 @@ val set_sender_validate_refinements : bool -> unit
 (** Set sender_validate_refinements *)
 
 val receiver_validate_refinements : unit -> bool
-(** When refinement types are enabled, receivers should validate refinements *)
+(** When refinement types are enabled, receivers should validate refinements
+*)
 
 val set_receiver_validate_refinements : bool -> unit
 (** Set receiver_validate_refinements *)

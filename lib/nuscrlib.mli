@@ -47,7 +47,8 @@ val get_global_type : scr_module -> protocol:ProtocolName.t -> Gtype.t
 val get_global_type_literature_syntax :
   scr_module -> protocol:ProtocolName.t -> LiteratureSyntax.global
 (** [get_global_type_literature_syntax module ~protocol] gets the
-    corresponding global type for a protocol in a module in literature syntax *)
+    corresponding global type for a protocol in a module in literature syntax
+*)
 
 val get_global_type_protobuf :
   scr_module -> protocol:ProtocolName.t -> string
@@ -86,12 +87,14 @@ val generate_ocaml_code :
   -> string
 (** [generate_code ~monad module protocol role] generates event-style OCaml
     code for the [role] in [protocol], inside a [module] [monad] indicates
-    whether the generated code uses a monad for transport (e.g. Lwt, Async) *)
+    whether the generated code uses a monad for transport (e.g. Lwt, Async)
+*)
 
 val generate_sexp : scr_module -> protocol:ProtocolName.t -> string
 (** [generate_code ~monad module protocol role] generates event-style OCaml
     code for the [role] in [protocol], inside a [module] [monad] indicates
-    whether the generated code uses a monad for transport (e.g. Lwt, Async) *)
+    whether the generated code uses a monad for transport (e.g. Lwt, Async)
+*)
 
 val generate_ast :
      monad:bool

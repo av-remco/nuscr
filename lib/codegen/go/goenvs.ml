@@ -1505,8 +1505,11 @@ end = struct
     let invite_env = InviteEnv.create local_protocol invite_imports in
     let callbacks_env = CallbacksEnv.create root_dir callback_enum_names in
     let role_imports = ImportsEnv.create root_dir in
-    {(* protocol; role *)
-     channel_env; invite_env; callbacks_env; role_imports}
+    { (* protocol; role *)
+      channel_env
+    ; invite_env
+    ; callbacks_env
+    ; role_imports }
 
   let get_or_add_channel ({channel_env; _} as t) chan_key =
     let channel_env, (channel_name, _) =

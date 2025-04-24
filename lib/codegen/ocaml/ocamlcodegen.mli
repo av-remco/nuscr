@@ -1,6 +1,7 @@
 (** Code generation from EFSM *)
 
-(** This module transforms a EFSM generated from local types into OCaml code. *)
+(** This module transforms a EFSM generated from local types into OCaml code.
+*)
 
 open Names
 open! Ppxlib_ast

@@ -42,7 +42,8 @@ val of_local_type : Ltype.t -> state * t
 (** Construct an EFSM from a local type *)
 
 val show : t -> string
-(** Produce a DOT representation of EFSM, which can be visualised by Graphviz *)
+(** Produce a DOT representation of EFSM, which can be visualised by Graphviz
+*)
 
 val state_action_type :
      G.t

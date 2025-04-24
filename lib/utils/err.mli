@@ -36,7 +36,8 @@ type user_error =
   | UnguardedTypeVariable of TypeVariableName.t
 [@@deriving sexp_of]
 
-(** UserError is a user error and should be reported back so it can be fixed *)
+(** UserError is a user error and should be reported back so it can be fixed
+*)
 exception UserError of user_error
 [@@deriving sexp_of]
 
