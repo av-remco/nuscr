@@ -2,5 +2,8 @@
   "devDependencies": {
     "minify": "^9.1.0",
     "serve": "^14.0.1"
+  },
+  "resolutions": {
+    "on-headers": "^1.1.0"
   }
 }
