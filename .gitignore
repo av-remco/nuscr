@@ -8,3 +8,6 @@ _build/
 
 # website
 _site
+
+# macos
+.DS_Store
