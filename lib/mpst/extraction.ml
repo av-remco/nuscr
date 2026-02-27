@@ -14,6 +14,12 @@ let rec swap_role swap_role_f {value; loc} =
           ; from_role= swap_role_f from_role
           ; to_roles= List.map ~f:swap_role_f to_roles
           ; ann }
+    | TimeMessageTransfer {message; from_role; to_roles; clock; time_const; reset_clock} ->
+        TimeMessageTransfer
+          { message
+          ; from_role= swap_role_f from_role
+          ; to_roles= List.map ~f:swap_role_f to_roles
+          ; clock; time_const; reset_clock }
     | Recursion (rec_name, recvar, g) ->
         Recursion (rec_name, recvar, List.map ~f:(swap_role swap_role_f) g)
     | Continue (rec_name, exprs) -> Continue (rec_name, exprs)
@@ -311,7 +317,7 @@ let rename_nested_protocols (scr_module : scr_module) =
                 , List.map
                     ~f:(List.map ~f:(update_interaction known))
                     interactions_list ) }
-      | Do _ | MessageTransfer _ | Continue _ -> i
+      | Do _ | MessageTransfer _ | TimeMessageTransfer _ | Continue _ -> i
     in
     let proto = protocol.value in
     let prefix = proto.name in

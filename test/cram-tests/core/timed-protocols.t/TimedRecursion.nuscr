@@ -1,0 +1,6 @@
+timed global protocol Recursion(role A, role B) {
+    rec t {
+        msg() from A to B within [0;1] using c and resetting ();
+        continue t;
+    }
+}

@@ -69,6 +69,8 @@ module LabelName : TaggedName = Make ()
 
 module RoleName : TaggedName = Make ()
 
+module ClockName : TaggedName = Make ()
+
 module VariableName : TaggedName = Make ()
 
 module TypeVariableName : TaggedName = Make ()

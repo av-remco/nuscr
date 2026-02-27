@@ -55,6 +55,8 @@ module LabelName : TaggedName
 
 module RoleName : TaggedName
 
+module ClockName : TaggedName
+
 module VariableName : TaggedName
 
 module TypeVariableName : TaggedName

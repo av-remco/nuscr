@@ -1,0 +1,18 @@
+(*
+Adapted from
+https://github.com/alcestes/mpstk/blob/5a056cc2193c2c588c1c7ddf130176c3aacdf38e/examples/two-buyers.global
+*)
+
+timed global protocol TwoBuyer(role B1, role B2, role S) {
+  s(string) from B1 to S within [0;1] using c and resetting ();
+  b1(int) from S to B1 within [0;1] using c and resetting ();
+  b2(int) from S to B2 within [0;1] using c and resetting ();
+  bi2(int) from B1 to B2 within [0;1] using c and resetting ();
+  choice at B2 {
+    ok() from B2 to S within [0;1] using c and resetting ();
+    s(string) from B2 to S within [0;1] using c and resetting ();
+    b2(string) from S to B2 within [0;1] using c and resetting ();
+  } or {
+    quit() from B2 to S within [0;1] using c and resetting ();
+  }
+}

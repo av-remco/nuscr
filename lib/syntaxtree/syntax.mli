@@ -44,6 +44,20 @@ val message_label : message -> string
 
 val message_payload_ty : message -> string list
 
+type time_const =
+  | ConstInt of
+      { left_cons: int
+      ; incl_left_cons: bool
+      ; right_cons: int
+      ; incl_right_cons: bool }
+  | ConstInfRight of {left_cons: int; incl_left_cons: bool}
+  | ConstInfLeft of {right_cons: int; incl_right_cons: bool}
+  | ConstInfBoth
+[@@deriving eq, ord, sexp_of, show {with_path= false}]
+
+type reset_clock = ResetClock of ClockName.t | NoReset
+[@@deriving eq, ord, sexp_of, show {with_path= false}]
+
 type rec_var =
   {var: VariableName.t; roles: RoleName.t list; ty: payloadt; init: expr}
 [@@deriving show {with_path= false}, sexp_of]
@@ -57,6 +71,13 @@ and raw_global_interaction =
       ; from_role: RoleName.t
       ; to_roles: RoleName.t list
       ; ann: annotation option }
+  | TimeMessageTransfer of
+      { message: message
+      ; from_role: RoleName.t
+      ; to_roles: RoleName.t list
+      ; clock: ClockName.t
+      ; time_const: time_const
+      ; reset_clock: reset_clock }
   (* recursion variable, protocol *)
   | Recursion of TypeVariableName.t * rec_var list * global_interaction list
   | Continue of TypeVariableName.t * expr list

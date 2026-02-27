@@ -109,6 +109,10 @@ and token lexbuf =
   | "calls" -> CALLS_KW
   | "new" -> NEW_KW
   | "len" -> LEN_KW
+  | "within" -> WITHIN_KW
+  | "using" -> USING_KW
+  | "and resetting" -> RESET_KW
+  | "timed" -> TIMED_KW
   (* other *)
   | eof -> EOI
   | identifier ->

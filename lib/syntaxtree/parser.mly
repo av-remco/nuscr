@@ -53,6 +53,12 @@
 %token CALLS_KW
 %token NEW_KW
 
+(* timed protocol keywords *)
+%token TIMED_KW
+%token WITHIN_KW
+%token USING_KW
+%token RESET_KW
+
 (* pragmas *)
 %token PRAGMA_START
 %token PRAGMA_END
@@ -126,7 +132,7 @@ let raw_nested_protocol_decl ==
   } }
 
 let protocol_hdr ==
-  GLOBAL_KW ; PROTOCOL_KW? ; { () }
+  TIMED_KW? ; GLOBAL_KW ; PROTOCOL_KW? ; { () }
   | PROTOCOL_KW ; { () }
 
 let nested_hdr ==
@@ -154,6 +160,7 @@ let global_interaction == located(raw_global_interaction)
 
 let raw_global_interaction ==
   global_message_transfer
+  | time_global_message_transfer
   | global_recursion
   | global_continue
   | global_choice
@@ -219,6 +226,63 @@ let global_message_transfer ==
       ; ann = ann
       }
   }
+
+let time_global_message_transfer ==
+  msg = message ; FROM_KW ; frn = rolename ;
+  TO_KW ; trns = separated_nonempty_list(COMMA, rolename) ;
+  WITHIN_KW ; t_const = time_constraints ; USING_KW ;
+  clock = clockname ; RESET_KW ; rst_clock = reset_clock ; SEMICOLON ;
+  { TimeMessageTransfer
+      { message = msg
+      ; from_role = frn
+      ; to_roles = trns
+      ; clock = clock
+      ; time_const = t_const
+      ; reset_clock = rst_clock } }
+
+let clockname ==
+  x = raw_name; { ClockName.create x (Loc.create $loc) }
+
+let time_constraints ==
+  | LSQUARE ; left_cons = INT ; SEMICOLON ; right_cons = INT ; RSQUARE ;
+    { ConstInt
+        { left_cons
+        ; incl_left_cons = true
+        ; right_cons
+        ; incl_right_cons = true } }
+  | LSQUARE ; left_cons = INT ; SEMICOLON ; right_cons = INT ; LPAR ;
+    { ConstInt
+        { left_cons
+        ; incl_left_cons = true
+        ; right_cons
+        ; incl_right_cons = false } }
+  | RPAR ; left_cons = INT ; SEMICOLON ; right_cons = INT ; RSQUARE ;
+    { ConstInt
+        { left_cons
+        ; incl_left_cons = false
+        ; right_cons
+        ; incl_right_cons = true } }
+  | RPAR ; left_cons = INT ; SEMICOLON ; right_cons = INT ; LPAR ;
+    { ConstInt
+        { left_cons
+        ; incl_left_cons = false
+        ; right_cons
+        ; incl_right_cons = false } }
+  | LSQUARE ; left_cons = INT ; SEMICOLON ; PLUS ; RSQUARE ;
+    { ConstInfRight { left_cons; incl_left_cons = true } }
+  | RPAR ; left_cons = INT ; SEMICOLON ; PLUS ; RSQUARE ;
+    { ConstInfRight { left_cons; incl_left_cons = false } }
+  | LSQUARE ; MINUS ; SEMICOLON ; right_cons = INT ; RSQUARE ;
+    { ConstInfLeft { right_cons; incl_right_cons = true } }
+  | LSQUARE ; MINUS ; SEMICOLON ; right_cons = INT ; LPAR ;
+    { ConstInfLeft { right_cons; incl_right_cons = false } }
+  | LSQUARE ; MINUS ; SEMICOLON ; PLUS ; RSQUARE ;
+    { ConstInfBoth }
+
+let reset_clock ==
+  | LPAR ; RPAR ; { NoReset }
+  | LPAR ; c = raw_name ; RPAR ;
+    { ResetClock (ClockName.create c (Loc.create $loc)) }
 
 (* we have a qname because that's what fixme comments says in the
    Scribble parser *)

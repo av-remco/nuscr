@@ -229,7 +229,8 @@ let of_protocol (global_protocol : Syntax.global_protocol) =
     | [] -> (EndG, env.free_names)
     | {value; _} :: rest -> (
       match value with
-      | MessageTransfer {message; from_role; to_roles; _} ->
+      | MessageTransfer {message; from_role; to_roles; _}
+      | TimeMessageTransfer {message; from_role; to_roles; _} ->
           check_role from_role ;
           let init, free_names =
             conv_interactions

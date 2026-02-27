@@ -1,0 +1,7 @@
+timed global protocol Choice(role A, role B) {
+    choice at A {
+        ok() from A to B within [0;1] using c and resetting ();
+    } or {
+        quit() from A to B within [0;1] using c and resetting (c);
+    }
+}
