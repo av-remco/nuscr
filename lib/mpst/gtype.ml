@@ -17,6 +17,14 @@ type rec_var =
 
 type t =
   | MessageG of message * RoleName.t * RoleName.t * t
+  | MessageTG of
+      message
+      * RoleName.t
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
   | MuG of TypeVariableName.t * rec_var list * t
   | TVarG of TypeVariableName.t * Expr.t list * (t Lazy.t[@sexp.opaque])
   | ChoiceG of RoleName.t * t list
@@ -26,6 +34,8 @@ type t =
 
 let rec evaluate_lazy_gtype = function
   | MessageG (m, r1, r2, g) -> MessageG (m, r1, r2, evaluate_lazy_gtype g)
+  | MessageTG (m, r1, r2, g, tc, clk, rst) ->
+      MessageTG (m, r1, r2, evaluate_lazy_gtype g, tc, clk, rst)
   | MuG (tv, rv, g) -> MuG (tv, rv, evaluate_lazy_gtype g)
   | TVarG (tv, es, g) ->
       TVarG
@@ -61,6 +71,36 @@ module Formatting = struct
     fprintf ppf "%a@?" pp_rec_var rv ;
     Buffer.contents buffer
 
+  let pp_time_annot ppf tc clk rst =
+    let open Syntax in
+    pp_print_string ppf " within " ;
+    ( match tc with
+    | ConstInt {left_cons; incl_left_cons; right_cons; incl_right_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "%s%d;%d%s"
+             (if incl_left_cons then "[" else "(")
+             left_cons right_cons
+             (if incl_right_cons then "]" else ")") )
+    | ConstInfRight {left_cons; incl_left_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "%s%d;inf)"
+             (if incl_left_cons then "[" else "(")
+             left_cons )
+    | ConstInfLeft {right_cons; incl_right_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "(inf;%d%s" right_cons
+             (if incl_right_cons then "]" else ")") )
+    | ConstInfBoth -> pp_print_string ppf "(inf;inf)" ) ;
+    pp_print_string ppf " using " ;
+    pp_print_string ppf (ClockName.user clk) ;
+    pp_print_string ppf " and resetting " ;
+    match rst with
+    | ResetClock c ->
+        pp_print_string ppf "(" ;
+        pp_print_string ppf (ClockName.user c) ;
+        pp_print_string ppf ")"
+    | NoReset -> pp_print_string ppf "()"
+
   let rec pp ppf = function
     | MessageG (m, r1, r2, g) ->
         pp_print_string ppf (show_message m) ;
@@ -68,6 +108,16 @@ module Formatting = struct
         pp_print_string ppf (RoleName.user r1) ;
         pp_print_string ppf " to " ;
         pp_print_string ppf (RoleName.user r2) ;
+        pp_print_string ppf ";" ;
+        pp_force_newline ppf () ;
+        pp ppf g
+    | MessageTG (m, r1, r2, g, tc, clk, rst) ->
+        pp_print_string ppf (show_message m) ;
+        pp_print_string ppf " from " ;
+        pp_print_string ppf (RoleName.user r1) ;
+        pp_print_string ppf " to " ;
+        pp_print_string ppf (RoleName.user r2) ;
+        pp_time_annot ppf tc clk rst ;
         pp_print_string ppf ";" ;
         pp_force_newline ppf () ;
         pp ppf g
@@ -229,8 +279,7 @@ let of_protocol (global_protocol : Syntax.global_protocol) =
     | [] -> (EndG, env.free_names)
     | {value; _} :: rest -> (
       match value with
-      | MessageTransfer {message; from_role; to_roles; _}
-      | TimeMessageTransfer {message; from_role; to_roles; _} ->
+      | MessageTransfer {message; from_role; to_roles; _} ->
           check_role from_role ;
           let init, free_names =
             conv_interactions
@@ -246,6 +295,33 @@ let of_protocol (global_protocol : Syntax.global_protocol) =
                    , RoleName.where from_role
                    , RoleName.where to_role ) ) ;
             MessageG (of_syntax_message message, from_role, to_role, acc)
+          in
+          (List.fold_right ~f ~init to_roles, free_names)
+      | TimeMessageTransfer
+          {message; from_role; to_roles; clock; time_const; reset_clock}
+        ->
+          check_role from_role ;
+          let init, free_names =
+            conv_interactions
+              {env with unguarded_tvs= Set.empty (module TypeVariableName)}
+              rest
+          in
+          let f to_role acc =
+            check_role to_role ;
+            if RoleName.equal from_role to_role then
+              uerr
+                (ReflexiveMessage
+                   ( from_role
+                   , RoleName.where from_role
+                   , RoleName.where to_role ) ) ;
+            MessageTG
+              ( of_syntax_message message
+              , from_role
+              , to_role
+              , acc
+              , time_const
+              , clock
+              , reset_clock )
           in
           (List.fold_right ~f ~init to_roles, free_names)
       | Recursion (rname, rec_vars, interactions) ->
@@ -335,6 +411,8 @@ let rec flatten = function
         | g -> [g]
       in
       ChoiceG (role, List.concat_map ~f:lift choices)
+  | MessageTG (m, r1, r2, g, tc, clk, rst) ->
+      MessageTG (m, r1, r2, flatten g, tc, clk, rst)
   | g -> g
 
 let rec substitute g tvar g_sub =
@@ -360,6 +438,8 @@ let rec substitute g tvar g_sub =
       MuG (tvar_, rec_vars, substitute g_ tvar g_sub)
   | EndG -> EndG
   | MessageG (m, r1, r2, g_) -> MessageG (m, r1, r2, substitute g_ tvar g_sub)
+  | MessageTG (m, r1, r2, g_, tc, clk, rst) ->
+      MessageTG (m, r1, r2, substitute g_ tvar g_sub, tc, clk, rst)
   | ChoiceG (r, g_) ->
       ChoiceG (r, List.map ~f:(fun g__ -> substitute g__ tvar g_sub) g_)
   | CallG (caller, protocol, roles, g_) ->
@@ -371,6 +451,8 @@ let rec unfold = function
 
 let rec normalise = function
   | MessageG (m, r1, r2, g_) -> MessageG (m, r1, r2, normalise g_)
+  | MessageTG (m, r1, r2, g_, tc, clk, rst) ->
+      MessageTG (m, r1, r2, normalise g_, tc, clk, rst)
   | ChoiceG (r, g_) ->
       let g_ = List.map ~f:normalise g_ in
       flatten (ChoiceG (r, g_))
@@ -451,6 +533,7 @@ let validate_refinements_exn t =
     let encoded = Expr.encode_env tyenv in
     let rec gather_first_message = function
       | MessageG (m, _, _, _) -> [m.payload]
+      | MessageTG (m, _, _, _, _, _, _) -> [m.payload]
       | ChoiceG (_, gs) -> List.concat_map ~f:gather_first_message gs
       | MuG (_, _, g) -> gather_first_message g
       | TVarG (_, _, g) -> gather_first_message (Lazy.force g)
@@ -472,7 +555,8 @@ let validate_refinements_exn t =
         Expr.ensure_satisfiable tyenv ) ;
     function
     | EndG -> ()
-    | MessageG (m, role_send, role_recv, g) ->
+    | MessageG (m, role_send, role_recv, g)
+    | MessageTG (m, role_send, role_recv, g, _, _, _) ->
         let payloads = m.payload in
         let f (tenv, rvenv, role_knowledge) = function
           | PValue (v_opt, p_type) ->
@@ -597,6 +681,14 @@ let add_missing_payload_field_names nested_t =
           List.fold_map payload ~init:namegen ~f:add_missing_names
         in
         MessageG ({m with payload}, sender, recv, g)
+    | MessageTG (m, sender, recv, g, tc, clk, rst) ->
+        let g = add_missing_payload_names g in
+        let {payload; _} = m in
+        let namegen = Namegen.create () in
+        let _, payload =
+          List.fold_map payload ~init:namegen ~f:add_missing_names
+        in
+        MessageTG ({m with payload}, sender, recv, g, tc, clk, rst)
     | MuG (n, rec_vars, g) -> MuG (n, rec_vars, add_missing_payload_names g)
     | (TVarG _ | EndG) as p -> p
     | ChoiceG (r, gs) -> ChoiceG (r, List.map gs ~f:add_missing_payload_names)

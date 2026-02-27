@@ -14,6 +14,22 @@ type t =
   | SendL of message * RoleName.t * t
       (** [SendL (msg, name, t)] sends message [msg] to [name] and continues
           as [t] *)
+  | RecvTL of
+      message
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
+      (** [RecvTL (msg, name, t, tc, clock, reset)] is a timed receive *)
+  | SendTL of
+      message
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
+      (** [SendTL (msg, name, t, tc, clock, reset)] is a timed send *)
   | ChoiceL of RoleName.t * t list
       (** [ChoiceL (name, ts)] is a choice (internal or external) from [name]
           between the [ts] *)

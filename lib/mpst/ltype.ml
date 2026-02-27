@@ -8,6 +8,20 @@ open Message
 type t =
   | RecvL of message * RoleName.t * t
   | SendL of message * RoleName.t * t
+  | RecvTL of
+      message
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
+  | SendTL of
+      message
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
   | ChoiceL of RoleName.t * t list
   | TVarL of TypeVariableName.t * Expr.t list
   | MuL of TypeVariableName.t * (bool * Gtype.rec_var) list * t
@@ -51,6 +65,36 @@ module Formatting = struct
         pp_print_string ppf ", " ;
         pp_roles ppf roles
 
+  let pp_time_annot ppf tc clk rst =
+    let open Syntax in
+    pp_print_string ppf " within " ;
+    ( match tc with
+    | ConstInt {left_cons; incl_left_cons; right_cons; incl_right_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "%s%d;%d%s"
+             (if incl_left_cons then "[" else "(")
+             left_cons right_cons
+             (if incl_right_cons then "]" else ")") )
+    | ConstInfRight {left_cons; incl_left_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "%s%d;inf)"
+             (if incl_left_cons then "[" else "(")
+             left_cons )
+    | ConstInfLeft {right_cons; incl_right_cons} ->
+        pp_print_string ppf
+          (Printf.sprintf "(inf;%d%s" right_cons
+             (if incl_right_cons then "]" else ")") )
+    | ConstInfBoth -> pp_print_string ppf "(inf;inf)" ) ;
+    pp_print_string ppf " using " ;
+    pp_print_string ppf (ClockName.user clk) ;
+    pp_print_string ppf " and resetting " ;
+    match rst with
+    | ResetClock c ->
+        pp_print_string ppf "(" ;
+        pp_print_string ppf (ClockName.user c) ;
+        pp_print_string ppf ")"
+    | NoReset -> pp_print_string ppf "()"
+
   let rec pp ppf = function
     | RecvL (m, r, l) ->
         pp_print_string ppf (show_message m) ;
@@ -63,6 +107,22 @@ module Formatting = struct
         pp_print_string ppf (show_message m) ;
         pp_print_string ppf " to " ;
         pp_print_string ppf (RoleName.user r) ;
+        pp_print_string ppf ";" ;
+        pp_force_newline ppf () ;
+        pp ppf l
+    | RecvTL (m, r, l, tc, clk, rst) ->
+        pp_print_string ppf (show_message m) ;
+        pp_print_string ppf " from " ;
+        pp_print_string ppf (RoleName.user r) ;
+        pp_time_annot ppf tc clk rst ;
+        pp_print_string ppf ";" ;
+        pp_force_newline ppf () ;
+        pp ppf l
+    | SendTL (m, r, l, tc, clk, rst) ->
+        pp_print_string ppf (show_message m) ;
+        pp_print_string ppf " to " ;
+        pp_print_string ppf (RoleName.user r) ;
+        pp_time_annot ppf tc clk rst ;
         pp_print_string ppf ";" ;
         pp_force_newline ppf () ;
         pp ppf l
@@ -280,6 +340,21 @@ let rec merge projected_role lty1 lty2 =
             | _ ->
                 violation ~here:[%here]
                   "Merge receive must be merging receive local types" )
+        | RecvTL (m, _, lty, tc, clk, rst) as l -> (
+            let {label; _} = m in
+            match List.Assoc.find acc ~equal:LabelName.equal label with
+            | None -> (label, l) :: acc
+            | Some (RecvTL (m_, r, l_, tc_, clk_, rst_))
+              when List.equal equal_payload m.payload m_.payload
+                   && Syntax.equal_time_const tc tc_
+                   && ClockName.equal clk clk_
+                   && Syntax.equal_reset_clock rst rst_ ->
+                List.Assoc.add acc ~equal:LabelName.equal label
+                  (RecvTL (m, r, merge projected_role lty l_, tc, clk, rst))
+            | Some (RecvTL _) -> fail ()
+            | _ ->
+                violation ~here:[%here]
+                  "Merge receive must be merging receive local types" )
         | AcceptL (role', protocol, roles, new_roles, caller, lty) as l -> (
             let label = call_label caller protocol roles in
             match List.Assoc.find acc ~equal:LabelName.equal label with
@@ -338,24 +413,40 @@ let rec merge projected_role lty1 lty2 =
       in
       try_merge `Init var_lty_pairs
     in
+    let recv_role_of = function
+      | RecvL (_, r, _) | RecvTL (_, r, _, _, _, _) -> Some r
+      | _ -> None
+    in
     match (lty1, lty2) with
-    | RecvL (_, r1, _), RecvL (_, r2, _) ->
+    | RecvL (_, r1, _), RecvL (_, r2, _)
+    | RecvTL (_, r1, _, _, _, _), RecvTL (_, r2, _, _, _, _)
+    | RecvL (_, r1, _), RecvTL (_, r2, _, _, _, _)
+    | RecvTL (_, r1, _, _, _, _), RecvL (_, r2, _) ->
         if not @@ RoleName.equal r1 r2 then fail () ;
         merge_recv r1 [lty1; lty2]
     | SendL (m1, r1, lty1), SendL (m2, r2, lty2)
       when RoleName.equal r1 r2 && equal_message m1 m2 ->
         SendL (m1, r2, merge projected_role lty1 lty2)
+    | SendTL (m1, r1, lty1, tc1, clk1, rst1), SendTL (m2, r2, lty2, tc2, clk2, rst2)
+      when RoleName.equal r1 r2 && equal_message m1 m2
+           && Syntax.equal_time_const tc1 tc2
+           && ClockName.equal clk1 clk2
+           && Syntax.equal_reset_clock rst1 rst2 ->
+        SendTL (m1, r2, merge projected_role lty1 lty2, tc1, clk1, rst1)
     | AcceptL (_, _, _, _, caller, _), RecvL (_, r2, _) ->
         if not @@ RoleName.equal caller r2 then fail () ;
         merge_recv r2 [lty1; lty2]
     | RecvL (_, r1, _), AcceptL (_, _, _, _, caller, _) ->
         if not @@ RoleName.equal caller r1 then fail () ;
         merge_recv r1 [lty1; lty2]
-    | ChoiceL (r1, ltys1), RecvL (_, r2, _) when RoleName.equal r1 r2 ->
-        (* Choice is a set of receive *)
-        merge_recv r1 (lty2 :: ltys1)
-    | RecvL (_, r2, _), ChoiceL (r1, ltys2) when RoleName.equal r1 r2 ->
-        merge_recv r1 (lty1 :: ltys2)
+    | ChoiceL (r1, ltys1), lty2 when Option.is_some (recv_role_of lty2) ->
+        let r2 = Option.value_exn (recv_role_of lty2) in
+        if RoleName.equal r1 r2 then merge_recv r1 (lty2 :: ltys1)
+        else fail ()
+    | lty1, ChoiceL (r2, ltys2) when Option.is_some (recv_role_of lty1) ->
+        let r1 = Option.value_exn (recv_role_of lty1) in
+        if RoleName.equal r1 r2 then merge_recv r1 (lty1 :: ltys2)
+        else fail ()
     | ChoiceL (r1, ltys1), ChoiceL (r2, ltys2)
       when RoleName.equal r1 r2 && not (RoleName.equal r1 projected_role) ->
         merge_recv r1 (ltys1 @ ltys2)
@@ -381,7 +472,8 @@ let rec merge projected_role lty1 lty2 =
 (* In nested protocols, calls will send invitation messages all participants,
    so need to check if any of the roles in a call is the receiver *)
 let rec check_consistent_gchoice choice_r possible_roles = function
-  | MessageG (_, send_r, recv_r_, _) ->
+  | MessageG (_, send_r, recv_r_, _)
+  | MessageTG (_, send_r, recv_r_, _, _, _, _) ->
       if not @@ RoleName.equal send_r choice_r then
         uerr (RoleMismatch (choice_r, send_r)) ;
       if
@@ -522,11 +614,56 @@ let rec project' env (projected_role : RoleName.t) =
             List.fold ~init:(next env)
               ~f:(fun acc (var, t) -> SilentL (var, t, acc))
               named_payloads )
+  | MessageTG (m, send_r, recv_r, g_type, tc, clk, rst) -> (
+      let next env = project' env projected_role g_type in
+      match projected_role with
+      | _ when RoleName.equal projected_role send_r ->
+          SendTL
+            ( m
+            , recv_r
+            , next
+                {env with unguarded_tv= Set.empty (module TypeVariableName)}
+            , tc
+            , clk
+            , rst )
+      | _ when RoleName.equal projected_role recv_r ->
+          RecvTL
+            ( m
+            , send_r
+            , next
+                {env with unguarded_tv= Set.empty (module TypeVariableName)}
+            , tc
+            , clk
+            , rst )
+      (* Uninvolved roles see no time annotations *)
+      | _ ->
+          let named_payloads =
+            List.rev_filter_map
+              ~f:(function
+                | PValue (Some var, t) -> Some (var, t) | _ -> None )
+              m.payload
+          in
+          if
+            List.is_empty named_payloads
+            || (not @@ Pragma.refinement_type_enabled ())
+          then next env
+          else
+            let {silent_vars; _} = env in
+            let silent_vars =
+              List.fold ~init:silent_vars
+                ~f:(fun acc (var, _) -> Set.add acc var)
+                named_payloads
+            in
+            let env = {env with silent_vars} in
+            List.fold ~init:(next env)
+              ~f:(fun acc (var, t) -> SilentL (var, t, acc))
+              named_payloads )
   | ChoiceG (choice_r, g_types) -> (
       let check_distinct_prefix gtys =
         let rec aux acc = function
           | [] -> ()
-          | MessageG (m, _, _, _) :: rest ->
+          | MessageG (m, _, _, _) :: rest
+          | MessageTG (m, _, _, _, _, _, _) :: rest ->
               let l = m.label in
               if Set.mem acc l (* FIXME: Use 2 labels for location *) then
                 uerr (DuplicateLabel l)
@@ -630,6 +767,12 @@ let make_unique_tvars ltype =
     | SendL (msg, recv, l) ->
         let namegen, l = rename_tvars tvar_mapping namegen l in
         (namegen, SendL (msg, recv, l))
+    | RecvTL (msg, sender, l, tc, clk, rst) ->
+        let namegen, l = rename_tvars tvar_mapping namegen l in
+        (namegen, RecvTL (msg, sender, l, tc, clk, rst))
+    | SendTL (msg, recv, l, tc, clk, rst) ->
+        let namegen, l = rename_tvars tvar_mapping namegen l in
+        (namegen, SendTL (msg, recv, l, tc, clk, rst))
     | MuL (tvar, rec_vars, l) ->
         let namegen, new_tvar = Namegen.unique_name namegen tvar in
         let tvar_mapping =

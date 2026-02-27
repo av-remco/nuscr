@@ -1053,7 +1053,8 @@ end = struct
     | EndG | TVarG _ -> env
     | MuG (_, _, gtype) ->
         generate_channel_vars global_t protocol_lookup env gtype
-    | MessageG ({payload; _}, sender, recv, gtype) ->
+    | MessageG ({payload; _}, sender, recv, gtype)
+    | MessageTG ({payload; _}, sender, recv, gtype, _, _, _) ->
         let env = create_channels_for_interaction env sender recv payload in
         generate_channel_vars global_t protocol_lookup env gtype
     | ChoiceG (_, gtypes) ->

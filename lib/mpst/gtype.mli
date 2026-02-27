@@ -25,6 +25,18 @@ type t =
   | MessageG of Message.message * RoleName.t * RoleName.t * t
       (** [MessageG (msg, sender, receiver, t)] starts by sending message
           [msg] from [sender] to [receiver] and continues as [t] *)
+  | MessageTG of
+      Message.message
+      * RoleName.t
+      * RoleName.t
+      * t
+      * Syntax.time_const
+      * ClockName.t
+      * Syntax.reset_clock
+      (** [MessageTG (msg, sender, receiver, t, tc, clock, reset)] is a timed
+          message transfer: sends [msg] from [sender] to [receiver], continues
+          as [t], with time constraint [tc] on [clock], optionally resetting
+          [reset] *)
   | MuG of TypeVariableName.t * rec_var list * t
       (** [MuG (type_var, rec_vars, g)] is a recursive type, corresponding to
           the syntax `\mu t. G`, where t is represented by [type_var] and G

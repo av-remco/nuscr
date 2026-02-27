@@ -76,7 +76,8 @@ let ensure_unique_identifiers (global_t : Gtype.nested_t) =
           validate_protocol_msgs messages g
       | ChoiceG (_, gtypes) ->
           List.fold ~init:messages ~f:validate_protocol_msgs gtypes
-      | MessageG (msg, _, _, g) ->
+      | MessageG (msg, _, _, g)
+      | MessageTG (msg, _, _, g, _, _, _) ->
           let messages = add_consistent_msg messages msg in
           validate_protocol_msgs messages g
     in
@@ -975,7 +976,8 @@ let rec gen_message_label_enums msgs_env = function
       gen_message_label_enums msgs_env g
   | ChoiceG (_, gtypes) ->
       List.fold ~init:msgs_env ~f:gen_message_label_enums gtypes
-  | MessageG ({label; _}, _, _, g) ->
+  | MessageG ({label; _}, _, _, g)
+  | MessageTG ({label; _}, _, _, g, _, _, _) ->
       let msgs_env = MessagesEnv.add_message_enum msgs_env label in
       gen_message_label_enums msgs_env g
 
@@ -1092,7 +1094,8 @@ let gen_role_implementation msgs_env protocol_setup_env ltype_env global_t
               choice_impls msgs_pkg indent
           in
           ((env, var_name_gen), impl)
-    | RecvL ({label; payload= payloads}, r, ltype') ->
+    | RecvL ({label; payload= payloads}, r, ltype')
+    | RecvTL ({label; payload= payloads}, r, ltype', _, _, _) ->
         let env, recv_cb =
           LTypeCodeGenEnv.new_recv_callback env label payloads r
         in
@@ -1107,7 +1110,8 @@ let gen_role_implementation msgs_env protocol_setup_env ltype_env global_t
         in
         ( (env, var_name_gen)
         , join_non_empty_lines ~sep:"\n\n" [recv_impl_str; impl] )
-    | SendL ({label; payload= payloads}, r, ltype') ->
+    | SendL ({label; payload= payloads}, r, ltype')
+    | SendTL ({label; payload= payloads}, r, ltype', _, _, _) ->
         let env, send_cb =
           LTypeCodeGenEnv.new_send_callback env label payloads r
         in

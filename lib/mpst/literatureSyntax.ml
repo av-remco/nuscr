@@ -23,7 +23,8 @@ type local =
   | EndL
 
 let rec from_gtype = function
-  | Gtype.MessageG (m, r_from, r_to, cont) ->
+  | Gtype.MessageG (m, r_from, r_to, cont)
+  | Gtype.MessageTG (m, r_from, r_to, cont, _, _, _) ->
       BranchG
         { g_br_from= r_from
         ; g_br_to= r_to
@@ -47,14 +48,16 @@ let rec from_gtype = function
             | Some r -> Some r
             | None -> (
               match gtype with
-              | Gtype.MessageG (_, _, r_to, _) -> Some r_to
+              | Gtype.MessageG (_, _, r_to, _)
+              | Gtype.MessageTG (_, _, r_to, _, _, _, _) -> Some r_to
               | _ ->
                   Err.violation ~here:[%here]
                     "Normalise should give a message as prefix" )
           in
           let cont =
             match gtype with
-            | Gtype.MessageG (m, _, _, cont) ->
+            | Gtype.MessageG (m, _, _, cont)
+            | Gtype.MessageTG (m, _, _, cont, _, _, _) ->
                 ( m.label
                 , List.map ~f:typename_of_payload m.payload
                 , from_gtype cont )
@@ -74,13 +77,15 @@ let rec from_gtype = function
   | Gtype.CallG _ -> Err.unimpl ~here:[%here] "from_gtype: CallG"
 
 let rec from_ltype = function
-  | Ltype.RecvL (m, r_from, cont) ->
+  | Ltype.RecvL (m, r_from, cont)
+  | Ltype.RecvTL (m, r_from, cont, _, _, _) ->
       RecvL
         ( r_from
         , [ ( m.label
             , List.map ~f:typename_of_payload m.payload
             , from_ltype cont ) ] )
-  | Ltype.SendL (m, r_from, cont) ->
+  | Ltype.SendL (m, r_from, cont)
+  | Ltype.SendTL (m, r_from, cont, _, _, _) ->
       SendL
         ( r_from
         , [ ( m.label
@@ -98,8 +103,12 @@ let rec from_ltype = function
             | Some r -> Some r
             | None -> (
               match ltype with
-              | Ltype.SendL (_, r_send, _) -> Some (`Send r_send)
-              | Ltype.RecvL (_, r_recv, _) -> Some (`Recv r_recv)
+              | Ltype.SendL (_, r_send, _)
+              | Ltype.SendTL (_, r_send, _, _, _, _) ->
+                  Some (`Send r_send)
+              | Ltype.RecvL (_, r_recv, _)
+              | Ltype.RecvTL (_, r_recv, _, _, _, _) ->
+                  Some (`Recv r_recv)
               | _ ->
                   Err.violation ~here:[%here]
                     "First action in ChoiceL should be either SendL or RecvL"
@@ -107,11 +116,13 @@ let rec from_ltype = function
           in
           let cont =
             match ltype with
-            | Ltype.SendL (m, _, cont) ->
+            | Ltype.SendL (m, _, cont)
+            | Ltype.SendTL (m, _, cont, _, _, _) ->
                 ( m.label
                 , List.map ~f:typename_of_payload m.payload
                 , from_ltype cont )
-            | Ltype.RecvL (m, _, cont) ->
+            | Ltype.RecvL (m, _, cont)
+            | Ltype.RecvTL (m, _, cont, _, _, _) ->
                 ( m.label
                 , List.map ~f:typename_of_payload m.payload
                 , from_ltype cont )

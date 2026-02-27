@@ -246,7 +246,8 @@ let of_local_type lty =
   let rec conv_ltype_aux env =
     let {g; tyvars; _} = env in
     function
-    | (RecvL (m, n, l) | SendL (m, n, l)) as curr_ty ->
+    | (RecvL (m, n, l) | SendL (m, n, l)
+      | RecvTL (m, n, l, _, _, _) | SendTL (m, n, l, _, _, _)) as curr_ty ->
         let curr = fresh () in
         let env, rannot = make_refinement_annotation env l in
         let env, next = conv_ltype_aux env l in
@@ -254,8 +255,8 @@ let of_local_type lty =
         let g = G.add_vertex g curr in
         let action =
           match curr_ty with
-          | SendL _ -> SendA (n, m, rannot)
-          | RecvL _ -> RecvA (n, m, rannot)
+          | SendL _ | SendTL _ -> SendA (n, m, rannot)
+          | RecvL _ | RecvTL _ -> RecvA (n, m, rannot)
           | _ -> assert false
         in
         let e = (curr, action, next) in
