@@ -34,19 +34,48 @@ let show_refinement_actions_annot {silent_vars; rec_expr_updates} =
   in
   silent_vars ^ rec_expr_updates
 
+type time_action_annot =
+  { time_constraint: Syntax.time_const
+  ; clock: ClockName.t
+  ; reset: Syntax.reset_clock }
+[@@deriving ord, sexp_of]
+
 type action =
-  | SendA of RoleName.t * message * refinement_action_annot
-  | RecvA of RoleName.t * message * refinement_action_annot
+  | SendA of RoleName.t * message * refinement_action_annot * time_action_annot option
+  | RecvA of RoleName.t * message * refinement_action_annot * time_action_annot option
   | Epsilon
 [@@deriving ord, sexp_of]
 
+let show_time_action_annot {time_constraint= tc; clock= clk; reset= rst} =
+  let open Syntax in
+  let tc_s =
+    match tc with
+    | ConstInt {left_cons; right_cons; _} -> sprintf "[%d;%d]" left_cons right_cons
+    | ConstInfRight {left_cons; _} -> sprintf "[%d;∞)" left_cons
+    | ConstInfLeft {right_cons; _} -> sprintf "(-∞;%d]" right_cons
+    | ConstInfBoth -> "(-∞;∞)"
+  in
+  let clk_s = ClockName.user clk in
+  let rst_s =
+    match rst with
+    | ResetClock c -> sprintf " reset %s" (ClockName.user c)
+    | NoReset -> ""
+  in
+  sprintf " within %s using %s%s" tc_s clk_s rst_s
+
 let show_action = function
-  | (SendA (r, msg, rannot) | RecvA (r, msg, rannot)) as a ->
+  | (SendA (r, msg, rannot, tannot) | RecvA (r, msg, rannot, tannot)) as a ->
       let symb =
         match a with SendA _ -> "!" | RecvA _ -> "?" | _ -> assert false
       in
-      sprintf "%s%s%s%s" (RoleName.user r) symb (show_message msg)
+      let tannot_s =
+        match tannot with
+        | Some ta -> show_time_action_annot ta
+        | None -> ""
+      in
+      sprintf "%s%s%s%s%s" (RoleName.user r) symb (show_message msg)
         (show_refinement_actions_annot rannot)
+        tannot_s
   | Epsilon -> "ε"
 
 module Label = struct
@@ -253,10 +282,16 @@ let of_local_type lty =
         let env, next = conv_ltype_aux env l in
         let g = env.g in
         let g = G.add_vertex g curr in
+        let tannot =
+          match curr_ty with
+          | SendTL (_, _, _, tc, clk, rst) | RecvTL (_, _, _, tc, clk, rst) ->
+              Some {time_constraint= tc; clock= clk; reset= rst}
+          | _ -> None
+        in
         let action =
           match curr_ty with
-          | SendL _ | SendTL _ -> SendA (n, m, rannot)
-          | RecvL _ | RecvTL _ -> RecvA (n, m, rannot)
+          | SendL _ | SendTL _ -> SendA (n, m, rannot, tannot)
+          | RecvL _ | RecvTL _ -> RecvA (n, m, rannot, tannot)
           | _ -> assert false
         in
         let e = (curr, action, next) in
@@ -354,8 +389,8 @@ let state_action_type g st =
   let f (_, a, _) acc =
     let aty =
       match a with
-      | SendA (r, _, _) -> `Send r
-      | RecvA (r, _, _) -> `Recv r
+      | SendA (r, _, _, _) -> `Send r
+      | RecvA (r, _, _, _) -> `Recv r
       | Epsilon ->
           Err.violation ~here:[%here]
             "Epsilon transitions should not appear after EFSM generation"
@@ -367,7 +402,7 @@ let state_action_type g st =
 let find_all_payloads g =
   let f (_, a, _) acc =
     match a with
-    | SendA (_, msg, _) | RecvA (_, msg, _) -> (
+    | SendA (_, msg, _, _) | RecvA (_, msg, _, _) -> (
         let {payload; _} = msg in
         let payloads = List.map ~f:typename_of_payload payload in
         match payloads with
@@ -385,7 +420,7 @@ let find_all_payloads g =
 let find_all_roles g =
   let f (_, a, _) acc =
     match a with
-    | SendA (r, _, _) | RecvA (r, _, _) -> Set.add acc r
+    | SendA (r, _, _, _) | RecvA (r, _, _, _) -> Set.add acc r
     | _ ->
         Err.violation ~here:[%here]
           "Epsilon transitions should not appear after EFSM generation"

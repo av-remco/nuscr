@@ -93,7 +93,7 @@ let compute_var_map start g rec_var_info =
         let acc = Map.set acc ~key:curr_st ~data:vars in
         let next (_, action, next_st) acc =
           match action with
-          | SendA (_, m, rannot) | RecvA (_, m, rannot) ->
+          | SendA (_, m, rannot, _) | RecvA (_, m, rannot, _) ->
               let silent_vars =
                 List.map ~f:(fun (v, ty) -> (v, ty, true)) rannot.silent_vars
               in
@@ -257,7 +257,7 @@ let generate_send_choices buffer g var_map =
     | `Send _ ->
         let collect_action (_, action, _) acc =
           match action with
-          | SendA (_, m, _) -> (
+          | SendA (_, m, _, _) -> (
               let label = m.label in
               let concrete_vars = find_concrete_vars m in
               match List.length concrete_vars with
@@ -316,7 +316,7 @@ let generate_transition_typedefs buffer g var_map =
     | `Recv _ ->
         let collect_recv_transition (_, action, _) acc =
           match action with
-          | RecvA (_, m, _) ->
+          | RecvA (_, m, _, _) ->
               let label = m.label in
               let concrete_vars = find_concrete_vars m in
               let recv_payload =
@@ -381,7 +381,7 @@ let construct_next_state var_map ~curr ~next action rec_var_info =
   let next_rv_info = Option.value ~default:[] (Map.find rec_var_info next) in
   let new_silent_vars, rec_var_updates =
     match action with
-    | SendA (_, _, rannot) | RecvA (_, _, rannot) ->
+    | SendA (_, _, rannot, _) | RecvA (_, _, rannot, _) ->
         let silent_vars = rannot.silent_vars in
         let rec_expr_updates = rannot.rec_expr_updates in
         let _, rec_var_updates =
@@ -511,7 +511,7 @@ let generate_run_fns buffer start g var_map rec_var_info =
             let collect_match_hand (_, action, next) acc =
               let entry =
                 match action with
-                | SendA (_, m, _) ->
+                | SendA (_, m, _, _) ->
                     let payload, base_ty, _ = find_payload m in
                     let match_pattern =
                       Printf.sprintf "| %s %s ->"
@@ -564,7 +564,7 @@ let generate_run_fns buffer start g var_map rec_var_info =
             let collect_match_hand (_, action, next) acc =
               let entry =
                 match action with
-                | RecvA (_, m, _) ->
+                | RecvA (_, m, _, _) ->
                     let payload, base_ty, e = find_payload m in
                     let match_pattern =
                       Printf.sprintf "| \"%s\" ->" (LabelName.user m.label)

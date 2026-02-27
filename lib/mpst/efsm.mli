@@ -13,11 +13,18 @@ type refinement_action_annot =
         (** List of updates to recursion variables *) }
 [@@deriving ord, sexp_of]
 
+(** Annotation for timed actions *)
+type time_action_annot =
+  { time_constraint: Syntax.time_const
+  ; clock: ClockName.t
+  ; reset: Syntax.reset_clock }
+[@@deriving ord, sexp_of]
+
 (** Transitions in the EFSM *)
 type action =
-  | SendA of RoleName.t * message * refinement_action_annot
+  | SendA of RoleName.t * message * refinement_action_annot * time_action_annot option
       (** Sending a [message] to [name] *)
-  | RecvA of RoleName.t * message * refinement_action_annot
+  | RecvA of RoleName.t * message * refinement_action_annot * time_action_annot option
       (** Receiving a [message] from [name] *)
   | Epsilon  (** Not used *)
 

@@ -54,7 +54,7 @@ let gen_callback_module ~monad (g : G.t) : structure_item =
     | `Send _ ->
         let gen_send (_, a, _) acc =
           match a with
-          | SendA (_, msg, _) ->
+          | SendA (_, msg, _, _) ->
               let label, payload_type = process_msg msg in
               let row =
                 mk_variant
@@ -81,7 +81,7 @@ let gen_callback_module ~monad (g : G.t) : structure_item =
     | `Recv _ ->
         let gen_recv (_, a, _) callbacks =
           match a with
-          | RecvA (_, msg, _) ->
+          | RecvA (_, msg, _, _) ->
               let label, payload_type = process_msg msg in
               let ret_ty = mk_monadic ~monad env in
               let ty =
@@ -139,7 +139,7 @@ let gen_role_ty roles =
 let get_transitions g st =
   let f (_, a, next) acc =
     match a with
-    | SendA (r, msg, _) | RecvA (r, msg, _) ->
+    | SendA (r, msg, _, _) | RecvA (r, msg, _, _) ->
         let {label; payload} = msg in
         (r, LabelName.user label, payload_values payload, next) :: acc
     | _ ->

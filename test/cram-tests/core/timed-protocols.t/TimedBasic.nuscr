@@ -1,5 +1,7 @@
+(*# RefinementTypes #*)
+
 timed global protocol Basic(role A, role B, role C) {
-    Test1() from A to B within [0;2] using a and resetting ();
+    Test1(x:int{x=0}) from A to B within [0;2] using a and resetting ();
     Test1() from B to C within [0;2] using a and resetting ();
     Test5(payload) from A to B within [0;2] using a and resetting ();
     Test2(integer) from A to B within [0;2] using a and resetting (a);
