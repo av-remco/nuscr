@@ -1,0 +1,6 @@
+protocol Heartbeat(role Sender, role Receiver) {
+  rec loop {
+    HEARTBEAT() from Sender to Receiver;
+    continue loop;
+  }
+}

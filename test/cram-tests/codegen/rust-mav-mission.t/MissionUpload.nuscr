@@ -1,0 +1,13 @@
+protocol MissionUpload(role GCS, role FC) {
+  MISSION_COUNT(int) from GCS to FC;
+  rec item_loop {
+    choice at FC {
+      MISSION_REQUEST_INT(int) from FC to GCS;
+      MISSION_ITEM_INT(int) from GCS to FC;
+      continue item_loop;
+    } or {
+      MISSION_ACK(int) from FC to GCS;
+      do MissionUpload(GCS, FC);
+    }
+  }
+}

@@ -1,0 +1,14 @@
+protocol MissionDownload(role GCS, role FC) {
+  MISSION_REQUEST_LIST() from GCS to FC;
+  MISSION_COUNT(int) from FC to GCS;
+  rec item_loop {
+    choice at GCS {
+      MISSION_REQUEST_INT(int) from GCS to FC;
+      MISSION_ITEM_INT(int) from FC to GCS;
+      continue item_loop;
+    } or {
+      MISSION_ACK(int) from GCS to FC;
+      do MissionDownload(GCS, FC);
+    }
+  }
+}

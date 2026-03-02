@@ -1,0 +1,5 @@
+protocol CommandInt(role GCS, role FC) {
+    COMMAND_INT(int) from GCS to FC;
+    COMMAND_ACK(int) from FC to GCS;
+    do CommandInt(GCS, FC);
+}

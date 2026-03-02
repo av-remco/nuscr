@@ -1,0 +1,5 @@
+protocol CommandLong(role GCS, role FC) {
+    COMMAND_LONG(int) from GCS to FC;
+    COMMAND_ACK(int) from FC to GCS;
+    do CommandLong(GCS, FC);
+}
