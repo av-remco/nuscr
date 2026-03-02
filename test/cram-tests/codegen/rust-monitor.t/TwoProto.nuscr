@@ -1,0 +1,9 @@
+global protocol Heartbeat(role GCS, role Drone) {
+  heartbeat(seq: int) from GCS to Drone;
+  heartbeatAck() from Drone to GCS;
+}
+
+global protocol Command(role GCS, role Drone) {
+  commandInt(cmd: int) from GCS to Drone;
+  commandAck(result: int) from Drone to GCS;
+}

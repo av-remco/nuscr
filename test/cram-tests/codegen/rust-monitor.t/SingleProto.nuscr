@@ -1,0 +1,4 @@
+global protocol Ping(role A, role B) {
+  ping() from A to B;
+  pong() from B to A;
+}

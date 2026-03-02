@@ -101,7 +101,7 @@ type global_action = global_action_verb * string (* protocol *)
 type local_action =
   local_action_verb * string * string (* protocol and role *)
 
-let main args global_actions local_actions =
+let main args global_actions local_actions rust_monitor_roles =
   let file = args.filename in
   Pragma.set_solver_show_queries args.show_solver_queries ;
   Pragma.set_verbose args.verbose ;
@@ -187,6 +187,11 @@ let main args global_actions local_actions =
               Nuscrlib.generate_rust_code ast ~protocol ~role
               |> print_string )
         local_actions
+    in
+    let () =
+      List.iter rust_monitor_roles ~f:(fun role_str ->
+          let role = RoleName.of_string role_str in
+          Nuscrlib.generate_rust_monitor_code ast ~role |> print_string )
     in
     let () =
       if args.enumerate then
@@ -315,6 +320,15 @@ let gencode_go =
   Arg.(
     value & opt_all role_proto []
     & info ["gencode-go"] ~doc ~docv:"ROLE@PROTO" )
+
+let gencode_rust_monitor =
+  let doc =
+    "Generate Rust monitor+dispatcher code for all protocols involving \
+     the specified role. <role_name>"
+  in
+  Arg.(
+    value & opt_all string []
+    & info ["gencode-rust-monitor"] ~doc ~docv:"ROLE" )
 
 let mk_local_actions project project_mpstk project_tex project_protobuf fsm
     gencode_fstar gencode_go gencode_ocaml gencode_ocaml_monadic gencode_rust =
@@ -457,7 +471,10 @@ let cmd =
       $ gencode_monadic_ocaml $ gencode_rust )
   in
   let term =
-    Term.(ret (const main $ args $ global_actions $ local_actions))
+    Term.(
+      ret
+        (const main $ args $ global_actions $ local_actions
+         $ gencode_rust_monitor ) )
   in
   Cmd.v info term
 

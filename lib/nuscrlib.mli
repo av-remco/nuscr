@@ -113,6 +113,10 @@ val generate_rust_code :
   scr_module -> protocol:ProtocolName.t -> role:RoleName.t -> string
 (** Generate Rust monitor code from EFSM *)
 
+val generate_rust_monitor_code : scr_module -> role:RoleName.t -> string
+(** Generate Rust monitor+dispatcher code for all protocols involving the
+    specified role *)
+
 module Pragma = Pragma
 module Expr = Expr
 module Gtype = Gtype

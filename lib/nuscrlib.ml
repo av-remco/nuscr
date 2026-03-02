@@ -197,6 +197,18 @@ module Toplevel = struct
   let generate_rust_code ast ~protocol ~role =
     let fsm = generate_fsm ast ~protocol ~role in
     Codegen.Rust.gen_code fsm
+
+  let generate_rust_monitor_code ast ~role =
+    let all_pairs = enumerate ast in
+    let protocols_for_role =
+      List.filter_map all_pairs ~f:(fun (proto, r) ->
+          if RoleName.equal r role then Some proto else None )
+    in
+    let efsms =
+      List.map protocols_for_role ~f:(fun proto ->
+          (proto, generate_fsm ast ~protocol:proto ~role) )
+    in
+    Codegen.RustMonitor.gen_code efsms
 end
 
 include Toplevel
