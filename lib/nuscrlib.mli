@@ -109,6 +109,10 @@ val generate_fstar_code :
   scr_module -> protocol:ProtocolName.t -> role:RoleName.t -> string
 (** Generate F* code, with support for refinement types *)
 
+val generate_rust_code :
+  scr_module -> protocol:ProtocolName.t -> role:RoleName.t -> string
+(** Generate Rust monitor code from EFSM *)
+
 module Pragma = Pragma
 module Expr = Expr
 module Gtype = Gtype
