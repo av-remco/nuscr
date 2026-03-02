@@ -135,10 +135,10 @@ Single protocol monitor generation
           };
           let key = (sys_id, comp_id, proto);
           if let Some(monitor) = self.monitors.get_mut(&key) {
-              if initiating(action.dir, &action.role, &action.label).is_some() {
-                  return Err(MonitorError::ConcurrentSameType(proto));
-              }
               if !monitor.step(action) {
+                  if initiating(action.dir, &action.role, &action.label).is_some() {
+                      return Err(MonitorError::ConcurrentSameType(proto));
+                  }
                   return Err(MonitorError::ProtocolViolation(proto));
               }
               if monitor.is_terminal() {

@@ -357,10 +357,10 @@ let gen_dispatcher () =
   \        };\n\
   \        let key = (sys_id, comp_id, proto);\n\
   \        if let Some(monitor) = self.monitors.get_mut(&key) {\n\
-  \            if initiating(action.dir, &action.role, &action.label).is_some() {\n\
-  \                return Err(MonitorError::ConcurrentSameType(proto));\n\
-  \            }\n\
   \            if !monitor.step(action) {\n\
+  \                if initiating(action.dir, &action.role, &action.label).is_some() {\n\
+  \                    return Err(MonitorError::ConcurrentSameType(proto));\n\
+  \                }\n\
   \                return Err(MonitorError::ProtocolViolation(proto));\n\
   \            }\n\
   \            if monitor.is_terminal() {\n\
