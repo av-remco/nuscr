@@ -337,7 +337,7 @@ let gen_monitor_instance protocols =
 let gen_dispatcher () =
   "#[derive(Debug)]\n\
    pub struct Dispatcher {\n\
-  \    monitors: HashMap<(u8, u8, ProtocolType), MonitorInstance>,\n\
+  \    monitors: HashMap<ProtocolType, MonitorInstance>,\n\
    }\n\
    \n\
    impl Dispatcher {\n\
@@ -347,16 +347,13 @@ let gen_dispatcher () =
    \n\
   \    pub fn dispatch(\n\
   \        &mut self,\n\
-  \        sys_id: u8,\n\
-  \        comp_id: u8,\n\
   \        action: &Action,\n\
   \    ) -> Result<(), MonitorError> {\n\
   \        let proto = match route(action.dir, &action.role, &action.label) {\n\
   \            Some(p) => p,\n\
   \            None => return Err(MonitorError::UncorrelatedMessage),\n\
   \        };\n\
-  \        let key = (sys_id, comp_id, proto);\n\
-  \        if let Some(monitor) = self.monitors.get_mut(&key) {\n\
+  \        if let Some(monitor) = self.monitors.get_mut(&proto) {\n\
   \            if !monitor.step(action) {\n\
   \                if initiating(action.dir, &action.role, &action.label).is_some() {\n\
   \                    return Err(MonitorError::ConcurrentSameType(proto));\n\
@@ -364,7 +361,7 @@ let gen_dispatcher () =
   \                return Err(MonitorError::ProtocolViolation(proto));\n\
   \            }\n\
   \            if monitor.is_terminal() {\n\
-  \                self.monitors.remove(&key);\n\
+  \                self.monitors.remove(&proto);\n\
   \            }\n\
   \        } else {\n\
   \            if initiating(action.dir, &action.role, &action.label).is_none() {\n\
@@ -373,7 +370,7 @@ let gen_dispatcher () =
   \            let mut monitor = MonitorInstance::new(proto);\n\
   \            monitor.step(action);\n\
   \            if !monitor.is_terminal() {\n\
-  \                self.monitors.insert(key, monitor);\n\
+  \                self.monitors.insert(proto, monitor);\n\
   \            }\n\
   \        }\n\
   \        Ok(())\n\

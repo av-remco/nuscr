@@ -115,7 +115,7 @@ Single protocol monitor generation
   
   #[derive(Debug)]
   pub struct Dispatcher {
-      monitors: HashMap<(u8, u8, ProtocolType), MonitorInstance>,
+      monitors: HashMap<ProtocolType, MonitorInstance>,
   }
   
   impl Dispatcher {
@@ -125,16 +125,13 @@ Single protocol monitor generation
   
       pub fn dispatch(
           &mut self,
-          sys_id: u8,
-          comp_id: u8,
           action: &Action,
       ) -> Result<(), MonitorError> {
           let proto = match route(action.dir, &action.role, &action.label) {
               Some(p) => p,
               None => return Err(MonitorError::UncorrelatedMessage),
           };
-          let key = (sys_id, comp_id, proto);
-          if let Some(monitor) = self.monitors.get_mut(&key) {
+          if let Some(monitor) = self.monitors.get_mut(&proto) {
               if !monitor.step(action) {
                   if initiating(action.dir, &action.role, &action.label).is_some() {
                       return Err(MonitorError::ConcurrentSameType(proto));
@@ -142,7 +139,7 @@ Single protocol monitor generation
                   return Err(MonitorError::ProtocolViolation(proto));
               }
               if monitor.is_terminal() {
-                  self.monitors.remove(&key);
+                  self.monitors.remove(&proto);
               }
           } else {
               if initiating(action.dir, &action.role, &action.label).is_none() {
@@ -151,7 +148,7 @@ Single protocol monitor generation
               let mut monitor = MonitorInstance::new(proto);
               monitor.step(action);
               if !monitor.is_terminal() {
-                  self.monitors.insert(key, monitor);
+                  self.monitors.insert(proto, monitor);
               }
           }
           Ok(())
