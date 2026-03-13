@@ -1,19 +1,21 @@
-Generate Rust monitor for Client
-  $ nuscr --gencode-rust=C@RunningSum RunningSum.nuscr > C_monitor.rs
+Generate Rust monitor for Client (strlen: string type + len(), documents codegen gap)
+  $ nuscr --gencode-rust=C@Strlen Strlen.nuscr > C_monitor.rs
   $ cat C_monitor.rs
+  #![allow(unused_variables)]
+  
   #[derive(Debug, Clone, PartialEq, Eq)]
   enum State {
-      S0 { total: i64 },
-      S3 { total: i64, x: i64, y: i64 },
-      S5 { total: i64 },
-      S6 { total: i64 },
+      S0 { token: String },
+      S3 { token: String, tok2: String },
+      S5 { token: String },
+      S6 { token: String },
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
   pub enum Label {
-      Add,
-      Bye,
-      Sum,
+      Ack,
+      Quit,
+      Update,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,52 +40,49 @@ Generate Rust monitor for Client
   }
   
   #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct RunningSumMonitor {
+  pub struct StrlenMonitor {
       state: State,
   }
   
-  impl RunningSumMonitor {
+  impl StrlenMonitor {
       pub fn new() -> Self {
-          Self { state: State::S0 { total: 0 } }
+          Self { state: State::S0 { token: "init".to_string() } }
       }
   
       pub fn step(&mut self, action: &Action) -> bool {
           match (self.state.clone(), &action.dir, &action.label) {
-              (State::S0 { total }, Direction::Send, Label::Add) =>
+              (State::S0 { token }, Direction::Send, Label::Update) =>
                   match action.payloads.as_slice() {
-                      [Value::Int(x), Value::Int(y)] => {
-                          let x = x.clone();
-                          let y = y.clone();
-                          if !((x) > (0) && (y) > (0)) { return false; }
-                          self.state = State::S3 { total, x, y };
+                      [Value::String(tok2)] => {
+                          let tok2 = tok2.clone();
+                          if !(((tok2).len() as i64) >= (4)) { return false; }
+                          self.state = State::S3 { token, tok2 };
                           true
                       }
                       _ => false
                   },
-              (State::S0 { total }, Direction::Send, Label::Bye) =>
+              (State::S0 { token }, Direction::Send, Label::Quit) =>
                   match action.payloads.as_slice() {
                       [] => {
-                          self.state = State::S5 { total };
+                          self.state = State::S5 { token };
                           true
                       }
                       _ => false
                   },
-              (State::S3 { total, x, y }, Direction::Recv, Label::Sum) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(r)] => {
-                          let r = r.clone();
-                          if !((r) == ((x) + (y))) { return false; }
-                          let new_total = (total) + (r);
-                          if !((new_total) < (100)) { return false; }
-                          self.state = State::S0 { total: new_total };
-                          true
-                      }
-                      _ => false
-                  },
-              (State::S5 { total }, Direction::Recv, Label::Bye) =>
+              (State::S3 { token, tok2 }, Direction::Recv, Label::Ack) =>
                   match action.payloads.as_slice() {
                       [] => {
-                          self.state = State::S6 { total };
+                          let new_token = tok2;
+                          if !(((new_token).len() as i64) >= (4)) { return false; }
+                          self.state = State::S0 { token: new_token };
+                          true
+                      }
+                      _ => false
+                  },
+              (State::S5 { token }, Direction::Recv, Label::Quit) =>
+                  match action.payloads.as_slice() {
+                      [] => {
+                          self.state = State::S6 { token };
                           true
                       }
                       _ => false
@@ -94,22 +93,24 @@ Generate Rust monitor for Client
   }
   
 
-Generate Rust monitor for Server
-  $ nuscr --gencode-rust=S@RunningSum RunningSum.nuscr > S_monitor.rs
+Generate Rust monitor for Server (strlen: string type + len(), documents codegen gap)
+  $ nuscr --gencode-rust=S@Strlen Strlen.nuscr > S_monitor.rs
   $ cat S_monitor.rs
+  #![allow(unused_variables)]
+  
   #[derive(Debug, Clone, PartialEq, Eq)]
   enum State {
-      S0 { total: i64 },
-      S3 { total: i64, x: i64, y: i64 },
-      S5 { total: i64 },
-      S6 { total: i64 },
+      S0 { token: String },
+      S3 { token: String, tok2: String },
+      S5 { token: String },
+      S6 { token: String },
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
   pub enum Label {
-      Add,
-      Bye,
-      Sum,
+      Ack,
+      Quit,
+      Update,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -134,52 +135,49 @@ Generate Rust monitor for Server
   }
   
   #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct RunningSumMonitor {
+  pub struct StrlenMonitor {
       state: State,
   }
   
-  impl RunningSumMonitor {
+  impl StrlenMonitor {
       pub fn new() -> Self {
-          Self { state: State::S0 { total: 0 } }
+          Self { state: State::S0 { token: "init".to_string() } }
       }
   
       pub fn step(&mut self, action: &Action) -> bool {
           match (self.state.clone(), &action.dir, &action.label) {
-              (State::S0 { total }, Direction::Recv, Label::Add) =>
+              (State::S0 { token }, Direction::Recv, Label::Update) =>
                   match action.payloads.as_slice() {
-                      [Value::Int(x), Value::Int(y)] => {
-                          let x = x.clone();
-                          let y = y.clone();
-                          if !((x) > (0) && (y) > (0)) { return false; }
-                          self.state = State::S3 { total, x, y };
+                      [Value::String(tok2)] => {
+                          let tok2 = tok2.clone();
+                          if !(((tok2).len() as i64) >= (4)) { return false; }
+                          self.state = State::S3 { token, tok2 };
                           true
                       }
                       _ => false
                   },
-              (State::S0 { total }, Direction::Recv, Label::Bye) =>
+              (State::S0 { token }, Direction::Recv, Label::Quit) =>
                   match action.payloads.as_slice() {
                       [] => {
-                          self.state = State::S5 { total };
+                          self.state = State::S5 { token };
                           true
                       }
                       _ => false
                   },
-              (State::S3 { total, x, y }, Direction::Send, Label::Sum) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(r)] => {
-                          let r = r.clone();
-                          if !((r) == ((x) + (y))) { return false; }
-                          let new_total = (total) + (r);
-                          if !((new_total) < (100)) { return false; }
-                          self.state = State::S0 { total: new_total };
-                          true
-                      }
-                      _ => false
-                  },
-              (State::S5 { total }, Direction::Send, Label::Bye) =>
+              (State::S3 { token, tok2 }, Direction::Send, Label::Ack) =>
                   match action.payloads.as_slice() {
                       [] => {
-                          self.state = State::S6 { total };
+                          let new_token = tok2;
+                          if !(((new_token).len() as i64) >= (4)) { return false; }
+                          self.state = State::S0 { token: new_token };
+                          true
+                      }
+                      _ => false
+                  },
+              (State::S5 { token }, Direction::Send, Label::Quit) =>
+                  match action.payloads.as_slice() {
+                      [] => {
+                          self.state = State::S6 { token };
                           true
                       }
                       _ => false
@@ -189,7 +187,6 @@ Generate Rust monitor for Server
       }
   }
   
-
 Compile Client monitor
   $ rustc --edition 2021 --crate-type lib C_monitor.rs -o C_monitor.rlib
 

@@ -45,6 +45,8 @@
    (>= v0.12.0))
   (ppx_here
    (>= v0.12.0))
+  (ppx_expect
+   (>= v0.14.0))
   (z3 :with-test)
   (odoc :with-doc)
   (ocamlgraph
