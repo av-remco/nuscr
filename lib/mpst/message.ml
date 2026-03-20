@@ -81,3 +81,65 @@ let of_syntax_message (message : Syntax.message) =
   | Message {name; payload} ->
       {label= name; payload= List.map ~f:of_syntax_payload payload}
   | MessageName name -> {label= name; payload= []}
+
+let payload_bound_vars payloads =
+  List.fold payloads ~init:(Set.empty (module VariableName))
+    ~f:(fun acc -> function
+      | PValue (Some v, _) -> Set.add acc v
+      | _ -> acc )
+
+let payloads_compatible p1 p2 =
+  let compatible_field f1 f2 =
+    match (f1, f2) with
+    | PValue (n1, t1), PValue (n2, t2) ->
+        Option.equal VariableName.equal n1 n2
+        && Expr.equal_payload_type_basic t1 t2
+    | PDelegate (pn1, rn1), PDelegate (pn2, rn2) ->
+        ProtocolName.equal pn1 pn2 && RoleName.equal rn1 rn2
+    | _ -> false
+  in
+  List.length p1 = List.length p2
+  && List.for_all2_exn p1 p2 ~f:compatible_field
+
+let flatten_and expr =
+  let rec aux = function
+    | Syntax.Exprs.Binop (Syntax.Exprs.And, l, r) -> aux l @ aux r
+    | e -> [e]
+  in
+  aux expr
+
+let conjoin = function
+  | [] -> None
+  | [e] -> Some e
+  | e :: es ->
+      Some (List.fold es ~init:e ~f:(fun acc e -> Syntax.Exprs.Binop (Syntax.Exprs.And, acc, e)))
+
+let split_guard payload_vars expr =
+  let conjuncts = flatten_and expr in
+  let local, nonlocal =
+    List.partition_tf conjuncts ~f:(fun c ->
+      Set.is_subset (Expr.free_var c) ~of_:payload_vars )
+  in
+  (conjoin local, conjoin nonlocal)
+
+let extract_message_guard {payload; _} =
+  let vars = payload_bound_vars payload in
+  let guards =
+    List.filter_map payload ~f:(function
+      | PValue (Some _, Expr.PTRefined (_, _, e)) ->
+          fst (split_guard vars e)
+      | _ -> None )
+  in
+  conjoin guards
+
+let guards_disjoint payloads g1 g2 =
+  let env =
+    List.fold payloads ~init:Expr.new_typing_env ~f:(fun env -> function
+      | PValue (Some v, ty) -> Expr.env_append env v ty
+      | _ -> env )
+  in
+  let script = Expr.encode_env env in
+  let script = Expr.add_assert_s_expr (Expr.sexp_of_expr g1) script in
+  let script = Expr.add_assert_s_expr (Expr.sexp_of_expr g2) script in
+  match Expr.check_sat script with `Unsat -> true | _ -> false
+  
