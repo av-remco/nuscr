@@ -2,10 +2,12 @@ Generate Rust monitor for Client (multi payload, cross-payload reference)
   $ nuscr --gencode-rust=C@MultiPayload MultiPayload.nuscr > C_monitor.rs
   $ cat C_monitor.rs
   #[derive(Debug, Clone, PartialEq, Eq)]
+  #[allow(dead_code)]
   enum State {
       S0,
       S1 { a: i64, b: i64 },
       S2 { a: i64, b: i64, d: i64 },
+      Error,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,28 +49,29 @@ Generate Rust monitor for Client (multi payload, cross-payload reference)
   
       pub fn step(&mut self, action: &Action) -> bool {
           match (self.state.clone(), &action.dir, &action.label) {
+              (State::Error, _, _) => true,
               (State::S0, Direction::Send, Label::Req) =>
                   match action.payloads.as_slice() {
                       [Value::Int(a), Value::Int(b)] => {
                           let a = a.clone();
                           let b = b.clone();
-                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { return false; }
+                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
                           self.state = State::S1 { a, b };
                           true
                       }
-                      _ => false
+                      _ => { self.state = State::Error; false }
                   },
               (State::S1 { a, b }, Direction::Recv, Label::Resp) =>
                   match action.payloads.as_slice() {
                       [Value::Int(d)] => {
                           let d = d.clone();
-                          if !((d) == ((a) - (b))) { return false; }
+                          if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
                           self.state = State::S2 { a, b, d };
                           true
                       }
-                      _ => false
+                      _ => { self.state = State::Error; false }
                   },
-              _ => false
+              _ => { self.state = State::Error; false }
           }
       }
   }
@@ -78,10 +81,12 @@ Generate Rust monitor for Server (nested arith, cross-payload reference)
   $ nuscr --gencode-rust=S@MultiPayload MultiPayload.nuscr > S_monitor.rs
   $ cat S_monitor.rs
   #[derive(Debug, Clone, PartialEq, Eq)]
+  #[allow(dead_code)]
   enum State {
       S0,
       S1 { a: i64, b: i64 },
       S2 { a: i64, b: i64, d: i64 },
+      Error,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,28 +128,29 @@ Generate Rust monitor for Server (nested arith, cross-payload reference)
   
       pub fn step(&mut self, action: &Action) -> bool {
           match (self.state.clone(), &action.dir, &action.label) {
+              (State::Error, _, _) => true,
               (State::S0, Direction::Recv, Label::Req) =>
                   match action.payloads.as_slice() {
                       [Value::Int(a), Value::Int(b)] => {
                           let a = a.clone();
                           let b = b.clone();
-                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { return false; }
+                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
                           self.state = State::S1 { a, b };
                           true
                       }
-                      _ => false
+                      _ => { self.state = State::Error; false }
                   },
               (State::S1 { a, b }, Direction::Send, Label::Resp) =>
                   match action.payloads.as_slice() {
                       [Value::Int(d)] => {
                           let d = d.clone();
-                          if !((d) == ((a) - (b))) { return false; }
+                          if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
                           self.state = State::S2 { a, b, d };
                           true
                       }
-                      _ => false
+                      _ => { self.state = State::Error; false }
                   },
-              _ => false
+              _ => { self.state = State::Error; false }
           }
       }
   }

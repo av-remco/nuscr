@@ -13,6 +13,7 @@ let generate_derive buffer ~copy =
 
 let generate_state_enum buffer var_map g =
   generate_derive ~copy:false buffer ;
+  Buffer.add_string buffer "#[allow(dead_code)]\n" ;
   Buffer.add_string buffer "enum State {\n" ;
   G.iter_vertex
     (fun state ->
@@ -29,6 +30,7 @@ let generate_state_enum buffer var_map g =
             (Printf.sprintf "    S%d { %s },\n" state
                (String.concat ~sep:", " fields) ) )
     g ;
+  Buffer.add_string buffer "    Error,\n";
   Buffer.add_string buffer "}\n"
 
 let generate_labels buffer g =
@@ -150,7 +152,8 @@ let generate_step_fn buffer g var_map rec_var_info =
   Buffer.add_string buffer
     "\n\
     \    pub fn step(&mut self, action: &Action) -> bool {\n\
-    \        match (self.state.clone(), &action.dir, &action.label) {\n" ;
+    \        match (self.state.clone(), &action.dir, &action.label) {\n\
+    \            (State::Error, _, _) => true,\n" ;
   G.iter_edges_e
     (fun (src, a, dst) ->
       match a with
@@ -201,7 +204,7 @@ let generate_step_fn buffer g var_map rec_var_info =
             ~f:(fun c ->
               Buffer.add_string buffer
                 (Printf.sprintf
-                   "                        if !(%s) { return false; }\n" c ) ) ;
+                   "                        if !(%s) { self.state = State::Error; return false; }\n" c ) ) ;
           (* Rec var update let-bindings *)
           List.iter rec_var_updates ~f:(fun (_, binding, expr, _) ->
               Buffer.add_string buffer
@@ -219,7 +222,7 @@ let generate_step_fn buffer g var_map rec_var_info =
                   in
                   Buffer.add_string buffer
                     (Printf.sprintf
-                       "                        if !(%s) { return false; }\n"
+                       "                        if !(%s) { self.state = State::Error; return false; }\n"
                        (Rustexpr.rust_show_expr pred) )
               | _ -> () ) ;
           (* Transition to next state *)
@@ -228,12 +231,12 @@ let generate_step_fn buffer g var_map rec_var_info =
                "                        self.state = State::%s;\n\
                \                        true\n\
                \                    }\n\
-               \                    _ => false\n\
+               \                    _ => { self.state = State::Error; false }\n\
                \                },\n"
                (fmt_state_variant dst dst_field_inits) )
       | Epsilon -> () )
     g ;
-  Buffer.add_string buffer "            _ => false\n        }\n    }\n"
+  Buffer.add_string buffer "            _ => { self.state = State::Error; false }\n        }\n    }\n"
 
 let generate_impl buffer start g protocol_name var_map rec_var_info =
   Buffer.add_string buffer
