@@ -1,6 +1,17 @@
 Generate Rust monitor for Client (multi payload, cross-payload reference)
-  $ nuscr --gencode-rust=C@MultiPayload MultiPayload.nuscr > C_monitor.rs
+  $ nuscr --gencode-rust-test=C@MultiPayload MultiPayload.nuscr > C_monitor.rs
   $ cat C_monitor.rs
+  pub enum Direction {
+      Recv,
+      Send,
+  }
+  
+  #[allow(dead_code)]
+  pub enum Action {
+      Req { dir: Direction, a: i64, b: i64 },
+      Resp { dir: Direction, d: i64 },
+  }
+  
   #[derive(Debug, Clone, PartialEq, Eq)]
   #[allow(dead_code)]
   enum State {
@@ -10,67 +21,45 @@ Generate Rust monitor for Client (multi payload, cross-payload reference)
       Error,
   }
   
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  pub enum Label {
-      Req,
-      Resp,
-  }
-  
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  pub enum Direction {
-      Send,
-      Recv,
-  }
-  
   #[derive(Debug, Clone, PartialEq, Eq)]
-  pub enum Value {
-      Int(i64),
-      Bool(bool),
-      String(String),
-      Unit,
-  }
+  pub struct MultiPayloadMonitor { state: State }
   
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct Action {
-      pub dir: Direction,
-      pub label: Label,
-      pub payloads: Vec<Value>,
-  }
-  
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct MultiPayloadMonitor {
-      state: State,
-  }
-  
+  #[allow(unused_variables)]
   impl MultiPayloadMonitor {
       pub fn new() -> Self {
           Self { state: State::S0 }
       }
   
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Resp { dir: Direction::Recv, d, .. } => true,
+              Action::Req { dir: Direction::Send, a, b, .. } => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  ((a) > (0)) && (((b) > (0)) && ((b) < (a)))
+              }
+              _ => false,
+          }
+      }
+  
       pub fn step(&mut self, action: &Action) -> bool {
-          match (self.state.clone(), &action.dir, &action.label) {
-              (State::Error, _, _) => true,
-              (State::S0, Direction::Send, Label::Req) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(a), Value::Int(b)] => {
-                          let a = a.clone();
-                          let b = b.clone();
-                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
-                          self.state = State::S1 { a, b };
-                          true
-                      }
-                      _ => { self.state = State::Error; false }
-                  },
-              (State::S1 { a, b }, Direction::Recv, Label::Resp) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(d)] => {
-                          let d = d.clone();
-                          if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
-                          self.state = State::S2 { a, b, d };
-                          true
-                      }
-                      _ => { self.state = State::Error; false }
-                  },
+          match (&self.state, action) {
+              (State::Error, _) => true,
+              (State::S0, Action::Req { dir: Direction::Send, a, b, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
+                  self.state = State::S1 { a, b };
+                  true
+              }
+              (State::S1 { a, b }, Action::Resp { dir: Direction::Recv, d, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  let d = d.clone();
+                  if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
+                  self.state = State::S2 { a, b, d };
+                  true
+              }
               _ => { self.state = State::Error; false }
           }
       }
@@ -78,8 +67,19 @@ Generate Rust monitor for Client (multi payload, cross-payload reference)
   
 
 Generate Rust monitor for Server (nested arith, cross-payload reference)
-  $ nuscr --gencode-rust=S@MultiPayload MultiPayload.nuscr > S_monitor.rs
+  $ nuscr --gencode-rust-test=S@MultiPayload MultiPayload.nuscr > S_monitor.rs
   $ cat S_monitor.rs
+  pub enum Direction {
+      Recv,
+      Send,
+  }
+  
+  #[allow(dead_code)]
+  pub enum Action {
+      Req { dir: Direction, a: i64, b: i64 },
+      Resp { dir: Direction, d: i64 },
+  }
+  
   #[derive(Debug, Clone, PartialEq, Eq)]
   #[allow(dead_code)]
   enum State {
@@ -89,67 +89,45 @@ Generate Rust monitor for Server (nested arith, cross-payload reference)
       Error,
   }
   
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  pub enum Label {
-      Req,
-      Resp,
-  }
-  
-  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  pub enum Direction {
-      Send,
-      Recv,
-  }
-  
   #[derive(Debug, Clone, PartialEq, Eq)]
-  pub enum Value {
-      Int(i64),
-      Bool(bool),
-      String(String),
-      Unit,
-  }
+  pub struct MultiPayloadMonitor { state: State }
   
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct Action {
-      pub dir: Direction,
-      pub label: Label,
-      pub payloads: Vec<Value>,
-  }
-  
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct MultiPayloadMonitor {
-      state: State,
-  }
-  
+  #[allow(unused_variables)]
   impl MultiPayloadMonitor {
       pub fn new() -> Self {
           Self { state: State::S0 }
       }
   
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Req { dir: Direction::Recv, a, b, .. } => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  ((a) > (0)) && (((b) > (0)) && ((b) < (a)))
+              }
+              Action::Resp { dir: Direction::Send, d, .. } => true,
+              _ => false,
+          }
+      }
+  
       pub fn step(&mut self, action: &Action) -> bool {
-          match (self.state.clone(), &action.dir, &action.label) {
-              (State::Error, _, _) => true,
-              (State::S0, Direction::Recv, Label::Req) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(a), Value::Int(b)] => {
-                          let a = a.clone();
-                          let b = b.clone();
-                          if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
-                          self.state = State::S1 { a, b };
-                          true
-                      }
-                      _ => { self.state = State::Error; false }
-                  },
-              (State::S1 { a, b }, Direction::Send, Label::Resp) =>
-                  match action.payloads.as_slice() {
-                      [Value::Int(d)] => {
-                          let d = d.clone();
-                          if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
-                          self.state = State::S2 { a, b, d };
-                          true
-                      }
-                      _ => { self.state = State::Error; false }
-                  },
+          match (&self.state, action) {
+              (State::Error, _) => true,
+              (State::S0, Action::Req { dir: Direction::Recv, a, b, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
+                  self.state = State::S1 { a, b };
+                  true
+              }
+              (State::S1 { a, b }, Action::Resp { dir: Direction::Send, d, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  let d = d.clone();
+                  if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
+                  self.state = State::S2 { a, b, d };
+                  true
+              }
               _ => { self.state = State::Error; false }
           }
       }
@@ -161,3 +139,114 @@ Compile Client monitor
 
 Compile Server monitor
   $ rustc --edition 2021 --crate-type lib S_monitor.rs -o S_monitor.rlib
+
+Production codegen (no support types, not compiled)
+  $ nuscr --gencode-rust=C@MultiPayload MultiPayload.nuscr
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  #[allow(dead_code)]
+  enum State {
+      S0,
+      S1 { a: i64, b: i64 },
+      S2 { a: i64, b: i64, d: i64 },
+      Error,
+  }
+  
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct MultiPayloadMonitor { state: State }
+  
+  #[allow(unused_variables)]
+  impl MultiPayloadMonitor {
+      pub fn new() -> Self {
+          Self { state: State::S0 }
+      }
+  
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Resp { dir: Direction::Recv, d, .. } => true,
+              Action::Req { dir: Direction::Send, a, b, .. } => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  ((a) > (0)) && (((b) > (0)) && ((b) < (a)))
+              }
+              _ => false,
+          }
+      }
+  
+      pub fn step(&mut self, action: &Action) -> bool {
+          match (&self.state, action) {
+              (State::Error, _) => true,
+              (State::S0, Action::Req { dir: Direction::Send, a, b, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
+                  self.state = State::S1 { a, b };
+                  true
+              }
+              (State::S1 { a, b }, Action::Resp { dir: Direction::Recv, d, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  let d = d.clone();
+                  if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
+                  self.state = State::S2 { a, b, d };
+                  true
+              }
+              _ => { self.state = State::Error; false }
+          }
+      }
+  }
+  
+
+  $ nuscr --gencode-rust=S@MultiPayload MultiPayload.nuscr
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  #[allow(dead_code)]
+  enum State {
+      S0,
+      S1 { a: i64, b: i64 },
+      S2 { a: i64, b: i64, d: i64 },
+      Error,
+  }
+  
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct MultiPayloadMonitor { state: State }
+  
+  #[allow(unused_variables)]
+  impl MultiPayloadMonitor {
+      pub fn new() -> Self {
+          Self { state: State::S0 }
+      }
+  
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Req { dir: Direction::Recv, a, b, .. } => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  ((a) > (0)) && (((b) > (0)) && ((b) < (a)))
+              }
+              Action::Resp { dir: Direction::Send, d, .. } => true,
+              _ => false,
+          }
+      }
+  
+      pub fn step(&mut self, action: &Action) -> bool {
+          match (&self.state, action) {
+              (State::Error, _) => true,
+              (State::S0, Action::Req { dir: Direction::Recv, a, b, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  if !((a) > (0) && ((b) > (0)) && ((b) < (a))) { self.state = State::Error; return false; }
+                  self.state = State::S1 { a, b };
+                  true
+              }
+              (State::S1 { a, b }, Action::Resp { dir: Direction::Send, d, .. }) => {
+                  let a = a.clone();
+                  let b = b.clone();
+                  let d = d.clone();
+                  if !((d) == ((a) - (b))) { self.state = State::Error; return false; }
+                  self.state = State::S2 { a, b, d };
+                  true
+              }
+              _ => { self.state = State::Error; false }
+          }
+      }
+  }
+  

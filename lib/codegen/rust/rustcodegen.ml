@@ -5,6 +5,7 @@ open Efsm
 open Message
 open Syntax
 open Rustefsm
+open Rustexpr
 
 let generate_derive buffer ~copy =
   let copy_str = if copy then ", Copy" else "" in
@@ -24,48 +25,19 @@ let generate_state_enum buffer var_map g =
           let fields =
             List.map vars ~f:(fun (v, ty) ->
                 Printf.sprintf "%s: %s" (VariableName.user v)
-                  (Rustexpr.rust_type_of_payload_type ty) )
+                  (rust_type_of_payload_type ty) )
           in
           Buffer.add_string buffer
             (Printf.sprintf "    S%d { %s },\n" state
                (String.concat ~sep:", " fields) ) )
     g ;
-  Buffer.add_string buffer "    Error,\n";
+  Buffer.add_string buffer "    Error,\n" ;
   Buffer.add_string buffer "}\n"
-
-let generate_labels buffer g =
-  let labels = collect_labels g in
-  generate_derive ~copy:true buffer ;
-  Buffer.add_string buffer "pub enum Label {\n" ;
-  Set.iter labels ~f:(fun label ->
-      Buffer.add_string buffer ("    " ^ upper_camel_case label ^ ",\n") ) ;
-  Buffer.add_string buffer "}\n"
-
-let generate_support_types buffer =
-  generate_derive ~copy:true buffer ;
-  Buffer.add_string buffer
-    "pub enum Direction {\n    Send,\n    Recv,\n}\n\n" ;
-  generate_derive ~copy:false buffer ;
-  Buffer.add_string buffer
-    "pub enum Value {\n\
-    \    Int(i64),\n\
-    \    Bool(bool),\n\
-    \    String(String),\n\
-    \    Unit,\n\
-     }\n\n" ;
-  generate_derive ~copy:false buffer ;
-  Buffer.add_string buffer
-    "pub struct Action {\n\
-    \    pub dir: Direction,\n\
-    \    pub label: Label,\n\
-    \    pub payloads: Vec<Value>,\n\
-     }\n"
 
 let generate_monitor_struct buffer protocol_name =
   generate_derive ~copy:false buffer ;
   Buffer.add_string buffer
-    (Printf.sprintf "pub struct %sMonitor {\n    state: State,\n}\n"
-       protocol_name )
+    (Printf.sprintf "pub struct %sMonitor { state: State }\n" protocol_name)
 
 let fmt_state_variant state fields =
   match fields with
@@ -93,7 +65,7 @@ let generate_constructor buffer start var_map rec_var_info =
               VariableName.equal v rv.rv_name )
         in
         Printf.sprintf "%s: %s" (VariableName.user v)
-          (Rustexpr.rust_show_expr rv.rv_init_expr) )
+          (rust_show_expr rv.rv_init_expr) )
   in
   Buffer.add_string buffer
     (Printf.sprintf
@@ -129,7 +101,7 @@ let find_new_rec_vars src_vars dst_rv_info rec_var_updates =
             VariableName.equal name rv.rv_name )
       in
       if (not in_src) && not has_update then
-        Some (rv.rv_name, Rustexpr.rust_show_expr rv.rv_init_expr)
+        Some (rv.rv_name, rust_show_expr rv.rv_init_expr)
       else None )
 
 let build_dst_field_inits dst_vars rec_var_updates new_rec_vars =
@@ -152,8 +124,8 @@ let generate_step_fn buffer g var_map rec_var_info =
   Buffer.add_string buffer
     "\n\
     \    pub fn step(&mut self, action: &Action) -> bool {\n\
-    \        match (self.state.clone(), &action.dir, &action.label) {\n\
-    \            (State::Error, _, _) => true,\n" ;
+    \        match (&self.state, action) {\n\
+    \            (State::Error, _) => true,\n" ;
   G.iter_edges_e
     (fun (src, a, dst) ->
       match a with
@@ -162,7 +134,10 @@ let generate_step_fn buffer g var_map rec_var_info =
             match a with
             | SendA _ -> "Send"
             | RecvA _ -> "Recv"
-            | Epsilon -> assert false
+            | Epsilon ->
+                Err.violationf ~here:[%here]
+                  "Found Epsilon transition in EFSM, not supported in Rust \
+                   codegen"
           in
           let src_vars = Map.find_exn var_map src in
           let dst_vars = Map.find_exn var_map dst in
@@ -179,38 +154,33 @@ let generate_step_fn buffer g var_map rec_var_info =
           let src_fields =
             List.map src_vars ~f:(fun (v, _) -> VariableName.user v)
           in
-          (* State + direction + label *)
+          let label = upper_camel_case (LabelName.user m.label) in
+          (* State + Action variant with direction and field bindings *)
           Buffer.add_string buffer
-            (Printf.sprintf
-               "            (State::%s, Direction::%s, Label::%s) =>\n"
+            (Printf.sprintf "            (State::%s, %s) => {\n"
                (fmt_state_variant src src_fields)
-               dir
-               (upper_camel_case (LabelName.user m.label)) ) ;
-          (* Payload match *)
-          Buffer.add_string buffer
-            (Printf.sprintf
-               "                match action.payloads.as_slice() {\n\
-               \                    %s => {\n"
-               (Rustexpr.rust_payload_slice_pattern m.payload) ) ;
-          (* Clone payload bindings from slice refs to owned values *)
+               (rust_action_pattern dir label m.payload) ) ;
+          (* Clone all bound variables (references from &self.state and
+             &Action) *)
           let payload_vars = find_payload_vars m in
-          List.iter payload_vars ~f:(fun (v, _) ->
+          let all_bindings = src_vars @ payload_vars in
+          List.iter all_bindings ~f:(fun (v, _) ->
               let name = VariableName.user v in
               Buffer.add_string buffer
-                (Printf.sprintf
-                   "                        let %s = %s.clone();\n" name name ) ) ;
+                (Printf.sprintf "                let %s = %s.clone();\n" name
+                   name ) ) ;
           (* Payload constraints *)
-          Option.iter (Rustexpr.rust_payload_constraints m.payload)
-            ~f:(fun c ->
+          Option.iter (rust_payload_constraints m.payload) ~f:(fun c ->
               Buffer.add_string buffer
                 (Printf.sprintf
-                   "                        if !(%s) { self.state = State::Error; return false; }\n" c ) ) ;
+                   "                if !(%s) { self.state = State::Error; \
+                    return false; }\n"
+                   c ) ) ;
           (* Rec var update let-bindings *)
           List.iter rec_var_updates ~f:(fun (_, binding, expr, _) ->
               Buffer.add_string buffer
-                (Printf.sprintf "                        let %s = %s;\n"
-                   binding
-                   (Rustexpr.rust_show_expr expr) ) ) ;
+                (Printf.sprintf "                let %s = %s;\n" binding
+                   (rust_show_expr expr) ) ) ;
           (* Rec var type constraints (on updated values only) *)
           List.iter rec_var_updates ~f:(fun (_, binding, _, rv_ty) ->
               match rv_ty with
@@ -222,26 +192,77 @@ let generate_step_fn buffer g var_map rec_var_info =
                   in
                   Buffer.add_string buffer
                     (Printf.sprintf
-                       "                        if !(%s) { self.state = State::Error; return false; }\n"
-                       (Rustexpr.rust_show_expr pred) )
+                       "                if !(%s) { self.state = \
+                        State::Error; return false; }\n"
+                       (rust_show_expr pred) )
               | _ -> () ) ;
           (* Transition to next state *)
           Buffer.add_string buffer
             (Printf.sprintf
-               "                        self.state = State::%s;\n\
-               \                        true\n\
-               \                    }\n\
-               \                    _ => { self.state = State::Error; false }\n\
-               \                },\n"
+               "                self.state = State::%s;\n\
+               \                true\n\
+               \            }\n"
                (fmt_state_variant dst dst_field_inits) )
       | Epsilon -> () )
     g ;
-  Buffer.add_string buffer "            _ => { self.state = State::Error; false }\n        }\n    }\n"
+  Buffer.add_string buffer
+    "            _ => { self.state = State::Error; false }\n\
+    \        }\n\
+    \    }\n"
+
+let generate_accepts_fn buffer g =
+  let arms = collect_accepts_arms g in
+  Buffer.add_string buffer
+    "\n\
+    \    pub fn accepts(&self, action: &Action) -> bool {\n\
+    \        match action {\n" ;
+  Map.iteri arms ~f:(fun ~key ~data:(payload, guards) ->
+      let dir = String.prefix key (String.index_exn key ':') in
+      let label = String.drop_prefix key (String.index_exn key ':' + 1) in
+      let payload_list =
+        List.map payload ~f:(fun (v, ty) -> PValue (Some v, ty))
+      in
+      let pattern = rust_action_pattern dir label payload_list in
+      match guards with
+      | [] ->
+          Buffer.add_string buffer
+            (Printf.sprintf "            %s => true,\n" pattern)
+      | _ ->
+          Buffer.add_string buffer
+            (Printf.sprintf "            %s => {\n" pattern) ;
+          let payload_names =
+            Set.of_list (module VariableName) (List.map payload ~f:fst)
+          in
+          List.iter payload ~f:(fun (v, _) ->
+              let name = VariableName.user v in
+              Buffer.add_string buffer
+                (Printf.sprintf "                let %s = %s.clone();\n" name
+                   name ) ) ;
+          let guard_fvs =
+            List.fold guards
+              ~init:(Set.empty (module VariableName))
+              ~f:(fun acc e -> Set.union acc (Expr.free_var e))
+          in
+          Set.iter guard_fvs ~f:(fun v ->
+              if not (Set.mem payload_names v) then
+                let name = VariableName.user v in
+                let stripped = strip_trailing_underscores name in
+                Buffer.add_string buffer
+                  (Printf.sprintf "                let %s = %s.clone();\n"
+                     name stripped ) ) ;
+          let disjoined =
+            List.map guards ~f:rust_show_expr |> String.concat ~sep:" || "
+          in
+          Buffer.add_string buffer
+            (Printf.sprintf "                %s\n            }\n" disjoined) ) ;
+  Buffer.add_string buffer "            _ => false,\n        }\n    }\n"
 
 let generate_impl buffer start g protocol_name var_map rec_var_info =
   Buffer.add_string buffer
-    (Printf.sprintf "impl %sMonitor {\n" protocol_name) ;
+    (Printf.sprintf "#[allow(unused_variables)]\nimpl %sMonitor {\n"
+       protocol_name ) ;
   generate_constructor buffer start var_map rec_var_info ;
+  generate_accepts_fn buffer g ;
   generate_step_fn buffer g var_map rec_var_info ;
   Buffer.add_string buffer "}\n"
 
@@ -252,9 +273,41 @@ let gen_code (start, (g, rec_var_info)) ~protocol =
   let buffer = Buffer.create 4096 in
   generate_state_enum buffer var_map g ;
   Buffer.add_string buffer "\n" ;
-  generate_labels buffer g ;
+  generate_monitor_struct buffer protocol_name ;
   Buffer.add_string buffer "\n" ;
-  generate_support_types buffer ;
+  generate_impl buffer start g protocol_name var_map rec_var_info ;
+  Buffer.contents buffer
+
+let generate_direction buffer =
+  Buffer.add_string buffer "pub enum Direction {\n    Recv,\n    Send,\n" ;
+  Buffer.add_string buffer "}\n"
+
+let generate_action buffer g =
+  let label_fields = collect_labels_with_fields g in
+  Buffer.add_string buffer "#[allow(dead_code)]\n" ;
+  Buffer.add_string buffer "pub enum Action {\n" ;
+  Map.iteri label_fields ~f:(fun ~key:label ~data:fields ->
+      let field_decls =
+        List.map fields ~f:(fun (v, ty) ->
+            Printf.sprintf "%s: %s" (VariableName.user v)
+              (rust_type_of_payload_type ty) )
+      in
+      let all_fields = "dir: Direction" :: field_decls in
+      Buffer.add_string buffer
+        (Printf.sprintf "    %s { %s },\n" label
+           (String.concat ~sep:", " all_fields) ) ) ;
+  Buffer.add_string buffer "}\n"
+
+let gen_test_code (start, (g, rec_var_info)) ~protocol =
+  let rec_var_info = rm_silent_var rec_var_info in
+  let var_map = compute_var_map start g rec_var_info in
+  let protocol_name = upper_camel_case @@ ProtocolName.user protocol in
+  let buffer = Buffer.create 4096 in
+  generate_direction buffer ;
+  Buffer.add_string buffer "\n" ;
+  generate_action buffer g ;
+  Buffer.add_string buffer "\n" ;
+  generate_state_enum buffer var_map g ;
   Buffer.add_string buffer "\n" ;
   generate_monitor_struct buffer protocol_name ;
   Buffer.add_string buffer "\n" ;
