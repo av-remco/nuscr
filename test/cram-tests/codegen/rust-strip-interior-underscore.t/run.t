@@ -13,65 +13,10 @@ Interior underscores preserved, only trailing underscore stripped
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  #[allow(dead_code)]
-  enum InteriorState {
-      S0,
-      S1 { foo_bar: i64 },
-      S2 { foo_bar: i64, foo_bar_: i64 },
-      Error,
-  }
-  
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct InteriorMonitor { state: InteriorState }
-  
-  #[allow(unused_variables)]
-  impl InteriorMonitor {
-      pub fn new() -> Self {
-          Self { state: InteriorState::S0 }
-      }
-  
-      pub fn accepts(&self, action: &Action) -> bool {
-          match action {
-              Action::Req { dir: Direction::Send, foo_bar, .. } => {
-                  let foo_bar = *foo_bar;
-                  (foo_bar) > (0)
-              }
-              _ => false,
-          }
-      }
-  
-      pub fn step(&mut self, action: &Action) -> bool {
-          match (&self.state, action) {
-              (InteriorState::Error, _) => true,
-              (InteriorState::S0, Action::Req { dir: Direction::Send, foo_bar, .. }) => {
-                  let foo_bar = *foo_bar;
-                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return false; }
-                  self.state = InteriorState::S1 { foo_bar };
-                  true
-              }
-              (InteriorState::S1 { foo_bar }, Action::Req { dir: Direction::Send, foo_bar: foo_bar_, .. }) => {
-                  let foo_bar = *foo_bar;
-                  let foo_bar_ = *foo_bar_;
-                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return false; }
-                  self.state = InteriorState::S2 { foo_bar, foo_bar_ };
-                  true
-              }
-              _ => { self.state = InteriorState::Error; false }
-          }
-      }
-  }
-  
-
-  $ nuscr --gencode-rust-test=S@Interior Interior.nuscr > S_monitor.rs
-  $ cat S_monitor.rs
-  pub enum Direction {
-      Recv,
-      Send,
-  }
-  
-  #[allow(dead_code)]
-  pub enum Action {
-      Req { dir: Direction, foo_bar: i64 },
+  pub enum Violation {
+      ConstraintFailed { expr: &'static str },
+      NoMatchingTransition,
+      AlreadyFailed,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,6 +37,79 @@ Interior underscores preserved, only trailing underscore stripped
           Self { state: InteriorState::S0 }
       }
   
+      pub const NAME: &'static str = "Interior";
+  
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Req { dir: Direction::Send, foo_bar, .. } => {
+                  let foo_bar = *foo_bar;
+                  (foo_bar) > (0)
+              }
+              _ => false,
+          }
+      }
+  
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
+          match (&self.state, action) {
+              (InteriorState::Error, _) => Err(Violation::AlreadyFailed),
+              (InteriorState::S0, Action::Req { dir: Direction::Send, foo_bar, .. }) => {
+                  let foo_bar = *foo_bar;
+                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar) > (0)" }); }
+                  self.state = InteriorState::S1 { foo_bar };
+                  Ok(())
+              }
+              (InteriorState::S1 { foo_bar }, Action::Req { dir: Direction::Send, foo_bar: foo_bar_, .. }) => {
+                  let foo_bar = *foo_bar;
+                  let foo_bar_ = *foo_bar_;
+                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar_) > (foo_bar)" }); }
+                  self.state = InteriorState::S2 { foo_bar, foo_bar_ };
+                  Ok(())
+              }
+              _ => { self.state = InteriorState::Error; Err(Violation::NoMatchingTransition) }
+          }
+      }
+  }
+  
+
+  $ nuscr --gencode-rust-test=S@Interior Interior.nuscr > S_monitor.rs
+  $ cat S_monitor.rs
+  pub enum Direction {
+      Recv,
+      Send,
+  }
+  
+  #[allow(dead_code)]
+  pub enum Action {
+      Req { dir: Direction, foo_bar: i64 },
+  }
+  
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  pub enum Violation {
+      ConstraintFailed { expr: &'static str },
+      NoMatchingTransition,
+      AlreadyFailed,
+  }
+  
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[allow(dead_code)]
+  enum InteriorState {
+      S0,
+      S1 { foo_bar: i64 },
+      S2 { foo_bar: i64, foo_bar_: i64 },
+      Error,
+  }
+  
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct InteriorMonitor { state: InteriorState }
+  
+  #[allow(unused_variables)]
+  impl InteriorMonitor {
+      pub fn new() -> Self {
+          Self { state: InteriorState::S0 }
+      }
+  
+      pub const NAME: &'static str = "Interior";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Req { dir: Direction::Recv, foo_bar, .. } => {
@@ -102,23 +120,23 @@ Interior underscores preserved, only trailing underscore stripped
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (InteriorState::Error, _) => true,
+              (InteriorState::Error, _) => Err(Violation::AlreadyFailed),
               (InteriorState::S0, Action::Req { dir: Direction::Recv, foo_bar, .. }) => {
                   let foo_bar = *foo_bar;
-                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar) > (0)" }); }
                   self.state = InteriorState::S1 { foo_bar };
-                  true
+                  Ok(())
               }
               (InteriorState::S1 { foo_bar }, Action::Req { dir: Direction::Recv, foo_bar: foo_bar_, .. }) => {
                   let foo_bar = *foo_bar;
                   let foo_bar_ = *foo_bar_;
-                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar_) > (foo_bar)" }); }
                   self.state = InteriorState::S2 { foo_bar, foo_bar_ };
-                  true
+                  Ok(())
               }
-              _ => { self.state = InteriorState::Error; false }
+              _ => { self.state = InteriorState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }
@@ -148,6 +166,8 @@ Production codegen
           Self { state: InteriorState::S0 }
       }
   
+      pub const NAME: &'static str = "Interior";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Req { dir: Direction::Send, foo_bar, .. } => {
@@ -158,23 +178,23 @@ Production codegen
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (InteriorState::Error, _) => true,
+              (InteriorState::Error, _) => Err(Violation::AlreadyFailed),
               (InteriorState::S0, Action::Req { dir: Direction::Send, foo_bar, .. }) => {
                   let foo_bar = *foo_bar;
-                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar) > (0)" }); }
                   self.state = InteriorState::S1 { foo_bar };
-                  true
+                  Ok(())
               }
               (InteriorState::S1 { foo_bar }, Action::Req { dir: Direction::Send, foo_bar: foo_bar_, .. }) => {
                   let foo_bar = *foo_bar;
                   let foo_bar_ = *foo_bar_;
-                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar_) > (foo_bar)" }); }
                   self.state = InteriorState::S2 { foo_bar, foo_bar_ };
-                  true
+                  Ok(())
               }
-              _ => { self.state = InteriorState::Error; false }
+              _ => { self.state = InteriorState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }
@@ -198,6 +218,8 @@ Production codegen
           Self { state: InteriorState::S0 }
       }
   
+      pub const NAME: &'static str = "Interior";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Req { dir: Direction::Recv, foo_bar, .. } => {
@@ -208,23 +230,23 @@ Production codegen
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (InteriorState::Error, _) => true,
+              (InteriorState::Error, _) => Err(Violation::AlreadyFailed),
               (InteriorState::S0, Action::Req { dir: Direction::Recv, foo_bar, .. }) => {
                   let foo_bar = *foo_bar;
-                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar) > (0)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar) > (0)" }); }
                   self.state = InteriorState::S1 { foo_bar };
-                  true
+                  Ok(())
               }
               (InteriorState::S1 { foo_bar }, Action::Req { dir: Direction::Recv, foo_bar: foo_bar_, .. }) => {
                   let foo_bar = *foo_bar;
                   let foo_bar_ = *foo_bar_;
-                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return false; }
+                  if !((foo_bar_) > (foo_bar)) { self.state = InteriorState::Error; return Err(Violation::ConstraintFailed { expr: "(foo_bar_) > (foo_bar)" }); }
                   self.state = InteriorState::S2 { foo_bar, foo_bar_ };
-                  true
+                  Ok(())
               }
-              _ => { self.state = InteriorState::Error; false }
+              _ => { self.state = InteriorState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }

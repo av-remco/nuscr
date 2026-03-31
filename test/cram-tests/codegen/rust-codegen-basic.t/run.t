@@ -14,77 +14,10 @@ Generate Rust monitor for Client
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-  #[allow(dead_code)]
-  enum AdderState {
-      S0,
-      S3,
-      S4,
-      S6,
-      S7,
-      Error,
-  }
-  
-  #[derive(Debug, Clone, PartialEq, Eq)]
-  pub struct AdderMonitor { state: AdderState }
-  
-  #[allow(unused_variables)]
-  impl AdderMonitor {
-      pub fn new() -> Self {
-          Self { state: AdderState::S0 }
-      }
-  
-      pub fn accepts(&self, action: &Action) -> bool {
-          match action {
-              Action::Bye { dir: Direction::Recv, .. } => true,
-              Action::Sum { dir: Direction::Recv, .. } => true,
-              Action::Add { dir: Direction::Send, .. } => true,
-              Action::Bye { dir: Direction::Send, .. } => true,
-              _ => false,
-          }
-      }
-  
-      pub fn step(&mut self, action: &Action) -> bool {
-          match (&self.state, action) {
-              (AdderState::Error, _) => true,
-              (AdderState::S0, Action::Add { dir: Direction::Send, .. }) => {
-                  self.state = AdderState::S3;
-                  true
-              }
-              (AdderState::S0, Action::Bye { dir: Direction::Send, .. }) => {
-                  self.state = AdderState::S6;
-                  true
-              }
-              (AdderState::S3, Action::Add { dir: Direction::Send, .. }) => {
-                  self.state = AdderState::S4;
-                  true
-              }
-              (AdderState::S4, Action::Sum { dir: Direction::Recv, .. }) => {
-                  self.state = AdderState::S0;
-                  true
-              }
-              (AdderState::S6, Action::Bye { dir: Direction::Recv, .. }) => {
-                  self.state = AdderState::S7;
-                  true
-              }
-              _ => { self.state = AdderState::Error; false }
-          }
-      }
-  }
-  
-
-Generate Rust monitor for Server
-  $ nuscr --gencode-rust-test=S@Adder Adder.nuscr > S_monitor.rs
-  $ cat S_monitor.rs
-  pub enum Direction {
-      Recv,
-      Send,
-  }
-  
-  #[allow(dead_code)]
-  pub enum Action {
-      Add { dir: Direction },
-      Bye { dir: Direction },
-      Sum { dir: Direction },
+  pub enum Violation {
+      ConstraintFailed { expr: &'static str },
+      NoMatchingTransition,
+      AlreadyFailed,
   }
   
   #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,6 +40,91 @@ Generate Rust monitor for Server
           Self { state: AdderState::S0 }
       }
   
+      pub const NAME: &'static str = "Adder";
+  
+      pub fn accepts(&self, action: &Action) -> bool {
+          match action {
+              Action::Bye { dir: Direction::Recv, .. } => true,
+              Action::Sum { dir: Direction::Recv, .. } => true,
+              Action::Add { dir: Direction::Send, .. } => true,
+              Action::Bye { dir: Direction::Send, .. } => true,
+              _ => false,
+          }
+      }
+  
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
+          match (&self.state, action) {
+              (AdderState::Error, _) => Err(Violation::AlreadyFailed),
+              (AdderState::S0, Action::Add { dir: Direction::Send, .. }) => {
+                  self.state = AdderState::S3;
+                  Ok(())
+              }
+              (AdderState::S0, Action::Bye { dir: Direction::Send, .. }) => {
+                  self.state = AdderState::S6;
+                  Ok(())
+              }
+              (AdderState::S3, Action::Add { dir: Direction::Send, .. }) => {
+                  self.state = AdderState::S4;
+                  Ok(())
+              }
+              (AdderState::S4, Action::Sum { dir: Direction::Recv, .. }) => {
+                  self.state = AdderState::S0;
+                  Ok(())
+              }
+              (AdderState::S6, Action::Bye { dir: Direction::Recv, .. }) => {
+                  self.state = AdderState::S7;
+                  Ok(())
+              }
+              _ => { self.state = AdderState::Error; Err(Violation::NoMatchingTransition) }
+          }
+      }
+  }
+  
+
+Generate Rust monitor for Server
+  $ nuscr --gencode-rust-test=S@Adder Adder.nuscr > S_monitor.rs
+  $ cat S_monitor.rs
+  pub enum Direction {
+      Recv,
+      Send,
+  }
+  
+  #[allow(dead_code)]
+  pub enum Action {
+      Add { dir: Direction },
+      Bye { dir: Direction },
+      Sum { dir: Direction },
+  }
+  
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  pub enum Violation {
+      ConstraintFailed { expr: &'static str },
+      NoMatchingTransition,
+      AlreadyFailed,
+  }
+  
+  #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  #[allow(dead_code)]
+  enum AdderState {
+      S0,
+      S3,
+      S4,
+      S6,
+      S7,
+      Error,
+  }
+  
+  #[derive(Debug, Clone, PartialEq, Eq)]
+  pub struct AdderMonitor { state: AdderState }
+  
+  #[allow(unused_variables)]
+  impl AdderMonitor {
+      pub fn new() -> Self {
+          Self { state: AdderState::S0 }
+      }
+  
+      pub const NAME: &'static str = "Adder";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Add { dir: Direction::Recv, .. } => true,
@@ -117,30 +135,30 @@ Generate Rust monitor for Server
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (AdderState::Error, _) => true,
+              (AdderState::Error, _) => Err(Violation::AlreadyFailed),
               (AdderState::S0, Action::Add { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S3;
-                  true
+                  Ok(())
               }
               (AdderState::S0, Action::Bye { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S6;
-                  true
+                  Ok(())
               }
               (AdderState::S3, Action::Add { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S4;
-                  true
+                  Ok(())
               }
               (AdderState::S4, Action::Sum { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S0;
-                  true
+                  Ok(())
               }
               (AdderState::S6, Action::Bye { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S7;
-                  true
+                  Ok(())
               }
-              _ => { self.state = AdderState::Error; false }
+              _ => { self.state = AdderState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }
@@ -174,6 +192,8 @@ Production codegen (no support types, not compiled)
           Self { state: AdderState::S0 }
       }
   
+      pub const NAME: &'static str = "Adder";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Bye { dir: Direction::Recv, .. } => true,
@@ -184,30 +204,30 @@ Production codegen (no support types, not compiled)
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (AdderState::Error, _) => true,
+              (AdderState::Error, _) => Err(Violation::AlreadyFailed),
               (AdderState::S0, Action::Add { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S3;
-                  true
+                  Ok(())
               }
               (AdderState::S0, Action::Bye { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S6;
-                  true
+                  Ok(())
               }
               (AdderState::S3, Action::Add { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S4;
-                  true
+                  Ok(())
               }
               (AdderState::S4, Action::Sum { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S0;
-                  true
+                  Ok(())
               }
               (AdderState::S6, Action::Bye { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S7;
-                  true
+                  Ok(())
               }
-              _ => { self.state = AdderState::Error; false }
+              _ => { self.state = AdderState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }
@@ -234,6 +254,8 @@ Production codegen (no support types, not compiled)
           Self { state: AdderState::S0 }
       }
   
+      pub const NAME: &'static str = "Adder";
+  
       pub fn accepts(&self, action: &Action) -> bool {
           match action {
               Action::Add { dir: Direction::Recv, .. } => true,
@@ -244,30 +266,30 @@ Production codegen (no support types, not compiled)
           }
       }
   
-      pub fn step(&mut self, action: &Action) -> bool {
+      pub fn step(&mut self, action: &Action) -> Result<(), Violation> {
           match (&self.state, action) {
-              (AdderState::Error, _) => true,
+              (AdderState::Error, _) => Err(Violation::AlreadyFailed),
               (AdderState::S0, Action::Add { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S3;
-                  true
+                  Ok(())
               }
               (AdderState::S0, Action::Bye { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S6;
-                  true
+                  Ok(())
               }
               (AdderState::S3, Action::Add { dir: Direction::Recv, .. }) => {
                   self.state = AdderState::S4;
-                  true
+                  Ok(())
               }
               (AdderState::S4, Action::Sum { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S0;
-                  true
+                  Ok(())
               }
               (AdderState::S6, Action::Bye { dir: Direction::Send, .. }) => {
                   self.state = AdderState::S7;
-                  true
+                  Ok(())
               }
-              _ => { self.state = AdderState::Error; false }
+              _ => { self.state = AdderState::Error; Err(Violation::NoMatchingTransition) }
           }
       }
   }

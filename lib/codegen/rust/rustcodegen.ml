@@ -144,6 +144,7 @@ let emit_branch_body buffer indent branch src_vars var_map rec_var_info
   List.iter rec_var_updates ~f:(fun (_, binding, _, rv_ty) ->
       match rv_ty with
       | Expr.PTRefined (binder, _, pred) ->
+          let pred_display = rust_show_expr pred in
           let pred =
             Expr.substitute ~from:binder
               ~replace:(Var (VariableName.of_string binding))
@@ -151,11 +152,12 @@ let emit_branch_body buffer indent branch src_vars var_map rec_var_info
           in
           Buffer.add_string buffer
             (Printf.sprintf
-               "%sif !(%s) { self.state = %sState::Error; return false; }\n"
-               indent (rust_show_expr pred) protocol_name )
+               "%sif !(%s) { self.state = %sState::Error; return Err(Violation::ConstraintFailed { expr: \"%s\" }); }\n"
+               indent (rust_show_expr pred) protocol_name
+               (String.escaped pred_display) )
       | _ -> () ) ;
   Buffer.add_string buffer
-    (Printf.sprintf "%sself.state = %sState::%s;\n%strue\n" indent
+    (Printf.sprintf "%sself.state = %sState::%s;\n%sOk(())\n" indent
        protocol_name
        (fmt_state_variant branch.sb_dst dst_field_inits)
        indent )
@@ -164,9 +166,9 @@ let generate_step_fn buffer g var_map rec_var_info protocol_name =
   Buffer.add_string buffer
     (Printf.sprintf
        "\n\
-       \    pub fn step(&mut self, action: &Action) -> bool {\n\
+       \    pub fn step(&mut self, action: &Action) -> Result<(), Violation> {\n\
        \        match (&self.state, action) {\n\
-       \            (%sState::Error, _) => true,\n"
+       \            (%sState::Error, _) => Err(Violation::AlreadyFailed),\n"
        protocol_name ) ;
   Map.iter (group_step_arms g)
     ~f:(fun (src, dir, label, merged_payload, branches) ->
@@ -193,22 +195,29 @@ let generate_step_fn buffer g var_map rec_var_info protocol_name =
               Buffer.add_string buffer
                 (Printf.sprintf
                    "                if !(%s) { self.state = %sState::Error; \
-                    return false; }\n"
-                   c protocol_name ) ) ;
+                    return Err(Violation::ConstraintFailed { expr: \"%s\" }); }\n"
+                   c protocol_name (String.escaped c) ) ) ;
           emit_branch_body buffer "                " branch src_vars var_map
             rec_var_info protocol_name
       | _ ->
           (* GuardedUniqueness guarantees the payload guards are mutually
              exclusive, so branching on payload guards alone is sound. *)
+          let all_guards =
+            List.filter_map branches ~f:(fun b ->
+                rust_payload_constraints b.sb_m.payload )
+          in
+          let guard_list =
+            String.concat ~sep:", " all_guards
+          in
           let rec go first = function
             | [] ->
                 Buffer.add_string buffer
                   (Printf.sprintf
                      "                } else {\n\
                      \                    self.state = %sState::Error;\n\
-                     \                    false\n\
+                     \                    Err(Violation::ConstraintFailed { expr: \"%s\" })\n\
                      \                }\n"
-                     protocol_name )
+                     protocol_name (String.escaped guard_list) )
             | branch :: rest -> (
                 let guard = rust_payload_constraints branch.sb_m.payload in
                 ( match (first, guard) with
@@ -232,7 +241,7 @@ let generate_step_fn buffer g var_map rec_var_info protocol_name =
       Buffer.add_string buffer "            }\n" ) ;
   Buffer.add_string buffer
     (Printf.sprintf
-       "            _ => { self.state = %sState::Error; false }\n\
+       "            _ => { self.state = %sState::Error; Err(Violation::NoMatchingTransition) }\n\
        \        }\n\
        \    }\n"
        protocol_name )
@@ -283,11 +292,19 @@ let generate_accepts_fn buffer g =
             (Printf.sprintf "                %s\n            }\n" disjoined) ) ;
   Buffer.add_string buffer "            _ => false,\n        }\n    }\n"
 
+let generate_name_const buffer protocol_name =
+  Buffer.add_string buffer
+    (Printf.sprintf
+       "\n\
+       \    pub const NAME: &'static str = \"%s\";\n"
+       protocol_name )
+
 let generate_impl buffer start g protocol_name var_map rec_var_info =
   Buffer.add_string buffer
     (Printf.sprintf "#[allow(unused_variables)]\nimpl %sMonitor {\n"
        protocol_name ) ;
   generate_constructor buffer start var_map rec_var_info protocol_name ;
+  generate_name_const buffer protocol_name ;
   generate_accepts_fn buffer g ;
   generate_step_fn buffer g var_map rec_var_info protocol_name ;
   Buffer.add_string buffer "}\n"
@@ -303,6 +320,15 @@ let gen_code (start, (g, rec_var_info)) ~protocol =
   Buffer.add_string buffer "\n" ;
   generate_impl buffer start g protocol_name var_map rec_var_info ;
   Buffer.contents buffer
+
+let generate_violation buffer =
+  generate_derive ~copy:true buffer ;
+  Buffer.add_string buffer
+    "pub enum Violation {\n\
+    \    ConstraintFailed { expr: &'static str },\n\
+    \    NoMatchingTransition,\n\
+    \    AlreadyFailed,\n\
+     }\n"
 
 let generate_direction buffer =
   Buffer.add_string buffer "pub enum Direction {\n    Recv,\n    Send,\n" ;
@@ -332,6 +358,8 @@ let gen_test_code (start, (g, rec_var_info)) ~protocol =
   generate_direction buffer ;
   Buffer.add_string buffer "\n" ;
   generate_action buffer g ;
+  Buffer.add_string buffer "\n" ;
+  generate_violation buffer ;
   Buffer.add_string buffer "\n" ;
   generate_state_enum buffer var_map g protocol_name ;
   Buffer.add_string buffer "\n" ;
