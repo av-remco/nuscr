@@ -246,7 +246,7 @@ let generate_step_fn buffer g var_map rec_var_info protocol_name =
        \    }\n"
        protocol_name )
 
-let generate_accepts_fn buffer ~single_state g =
+let generate_accepts_fn buffer g =
   let arms = collect_accepts_arms g in
   Buffer.add_string buffer
     "\n\
@@ -259,11 +259,11 @@ let generate_accepts_fn buffer ~single_state g =
         List.map payload ~f:(fun (v, ty) -> PValue (Some v, ty))
       in
       let pattern = rust_action_pattern dir label payload_list in
-      match (single_state, guards) with
-      | (_, []) | (true, _) ->
+      match guards with
+      | [] ->
           Buffer.add_string buffer
             (Printf.sprintf "            %s => true,\n" pattern)
-      | (false, _) ->
+      | _ ->
           Buffer.add_string buffer
             (Printf.sprintf "            %s => {\n" pattern) ;
           let payload_names =
@@ -297,8 +297,7 @@ let generate_impl buffer start g protocol_name var_map rec_var_info =
     (Printf.sprintf "#[allow(unused_variables)]\nimpl %sMonitor {\n"
        protocol_name ) ;
   generate_constructor buffer start var_map rec_var_info protocol_name ;
-  let single_state = G.nb_vertex g = 1 in
-  generate_accepts_fn buffer ~single_state g ;
+  generate_accepts_fn buffer g ;
   generate_step_fn buffer g var_map rec_var_info protocol_name ;
   Buffer.add_string buffer "}\n"
 
